@@ -8,6 +8,14 @@
 
 **Approach:** Python + FastAPI backend with in-memory SQLite (via SQLAlchemy), React + TypeScript + Vite frontend, REST API. Recommendation logic is a pure rule engine behind a service interface. Jira calls use the REST v3 API; fall back to labeled sample data when credentials are absent.
 
+**Runtime (confirmed):**
+- Python 3.14.0b4 — pre-release; use only stable stdlib and dependency features, avoid anything marked provisional in 3.14 docs.
+- Node v26.9.0 / npm 11.19.1 — current release, fully supported by Vite 5 and React 19.
+
+**Frontend navigation:** Wizard-style (linear, step-by-step) — Story Selector → Recommendation → Link Bob Work → Outcome & Comparison.
+
+**Sample story:** PIE-domain story pre-baked into the backend (e.g. "Add portfolio rebalancing endpoint to PIE API"). Always displayed with a visible `[SAMPLE DATA]` banner. Never presented as real engineering history.
+
 **Out of scope for MVP:** developer rankings, story-point estimation, forecasting dashboards, microservices, background workers, automated Bob session telemetry.
 
 ---
@@ -259,7 +267,7 @@ The service interface (`RecommendationService.generate(story) → Recommendation
 - `context.md`, `rules.md`, `BOB_USAGE.md` created with initial content.
 - Backend `requirements.txt` and `frontend/package.json` present with correct dependencies.
 - `GET /api/health` returns `{"status": "ok"}`.
-- Status: `[ ] pending`
+- Status: `[x] complete` — verified 2025-07-14. Health endpoint returns 200. Smoke test exits 0.
 
 ### Milestone 2 — Data layer and story import
 **Acceptance criteria:**
