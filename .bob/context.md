@@ -22,7 +22,7 @@ For a selected story the product:
 | ORM | SQLAlchemy | 2.0.41 |
 | Validation | Pydantic | 2.14.0 (pydantic-core 2.50.0, cp314 wheel) |
 | HTTP client | httpx | 0.28.1 |
-| Database | In-memory SQLite | (via SQLAlchemy) |
+| Database | File-backed SQLite (`bob_intelligence.db`) | (via SQLAlchemy) |
 | Frontend | React + TypeScript | React 19, TS 5.8 |
 | Bundler | Vite | 6.x |
 | Router | react-router-dom | 7.x |
@@ -35,10 +35,11 @@ Browser (React/Vite :5173)
      │  REST JSON  (proxied via Vite → :8000 in dev)
      ▼
 FastAPI (backend/main.py :8000)
-     ├── /api/stories         → jira_service  (Jira REST v3 or sample fallback)
-     ├── /api/recommendations → recommendation_service (rule engine)
-     ├── /api/bob-sessions    → SQLite (manual explicit link)
-     └── /api/outcomes        → evidence_service + SQLite
+     ├── /api/stories              → jira_service  (Jira REST v3 or explicit sample import)
+     ├── /api/developer-profiles   → sample import only (preserved; not used for recommendations in MVP)
+     ├── /api/recommendations      → recommendation_service (priority + mode — Milestone 3)
+     ├── /api/bob-sessions         → SQLite (manual explicit link — Milestone 4)
+     └── /api/outcomes             → evidence_service + SQLite (Milestone 5)
 ```
 
 No automatic Bob session telemetry. Bob sessions are created by explicit POST.
@@ -48,18 +49,32 @@ No automatic Bob session telemetry. Bob sessions are created by explicit POST.
 ```
 bob-intelligence/
 ├── backend/
-│   ├── main.py               FastAPI app + /api/health
-│   ├── database.py           SQLAlchemy engine + session
-│   ├── models.py             ORM models (Milestone 2)
-│   ├── schemas.py            Pydantic schemas (Milestone 2+)
-│   ├── routers/              One module per resource
-│   ├── services/             jira, recommendation, evidence
+│   ├── main.py               FastAPI app + /api/health + lifespan DB init
+│   ├── database.py           SQLAlchemy engine + session + init_db()
+│   ├── models.py             ORM models (all 6 entities — Milestone 2)
+│   ├── schemas.py            Pydantic schemas (Story, DeveloperProfile — Milestone 2)
+│   ├── routers/
+│   │   ├── stories.py        GET /api/stories, POST /api/stories/import, GET /api/stories/{id}
+│   │   ├── developer_profiles.py  GET /api/developer-profiles, POST .../import-sample
+│   │   ├── recommendations.py     placeholder (Milestone 3)
+│   │   ├── bob_sessions.py        placeholder (Milestone 4)
+│   │   └── outcomes.py            placeholder (Milestone 5)
+│   ├── services/
+│   │   ├── jira_service.py   Jira REST v3 fetch + sample data loader
+│   │   ├── recommendation_service.py  placeholder (Milestone 3)
+│   │   └── evidence_service.py        placeholder (Milestone 4)
+│   ├── sample_data/
+│   │   ├── stories.json            3 PIE-domain sample stories [SAMPLE DATA]
+│   │   └── developer_profiles.json 3 sample developer profiles [SAMPLE DATA]
+│   ├── tests/
+│   │   └── test_milestone2.py      33 pytest tests (all passing)
+│   ├── conftest.py           Test fixtures + DB isolation
 │   ├── requirements.txt
 │   ├── requirements-dev.txt
 │   └── .env.example
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/            4 wizard-step pages
+│   │   ├── pages/            4 wizard-step pages (placeholder shells)
 │   │   ├── api/              Typed fetch wrappers
 │   │   └── main.tsx          Router
 │   ├── index.html
@@ -67,9 +82,8 @@ bob-intelligence/
 │   ├── tsconfig.json
 │   └── package.json
 ├── scripts/
-│   └── smoke_test.sh
-├── context.md
-├── rules.md
+│   └── smoke_test.sh         Milestone 1 health check (passes)
+├── .bob/context.md
 ├── BOB_USAGE.md
 └── bob-intelligence-plan.md
 ```
@@ -78,34 +92,152 @@ bob-intelligence/
 
 | Milestone | Status | Notes |
 |-----------|--------|-------|
-| 1 — Scaffold + docs baseline | ✅ Complete | Health endpoint verified. Smoke test exits 0. pydantic pinned to 2.14.0 for Python 3.14 wheel compatibility. |
-| 2 — Data layer + story import | ⬜ Pending | |
+| 1 — Scaffold + docs baseline | ✅ Complete | Health endpoint verified. Smoke test exits 0. |
+| 2 — Data layer + story import | ✅ Complete | 33/33 tests passing. See details below. |
 | 3 — Recommendation engine | ⬜ Pending | |
 | 4 — Bob session link + evidence | ⬜ Pending | |
 | 5 — Outcome + comparison | ⬜ Pending | |
 | 6 — React frontend | ⬜ Pending | Placeholder pages exist |
 | 7 — Smoke test + demo readiness | ⬜ Pending | |
 
+## Milestone 2 — What Was Implemented
+
+### Database
+- `database.py` updated: file-backed SQLite at `bob_intelligence.db` (was in-memory). `init_db()` added — called via FastAPI lifespan on startup. Safe to call on every restart (no-op if tables exist).
+- Tests use isolated `bob_intelligence_test.db`, created fresh each session and deleted on teardown. Production DB is never touched by tests.
+
+### ORM Models (all 6 entities)
+- `Story` — jira_key, title, description, acceptance_criteria, story_points (metadata only), labels, priority, status, assignee, blockers, linked_prs, source, created_at
+- `DeveloperProfile` — display_name, jira_account_id, verified_skills, verified_pr_count, verified_review_count, recent_domains, availability_note, source
+- `Recommendation` — all three decision fields (priority, mode, dev-match) with independent approval gates per decision (see schema note below)
+- `BobSession` — summary, files_changed, pie_commit_sha
+- `Outcome` — test_result, build_result, ac_met, diff_summary, developer_id FK
+- `Comparison` — mode_verdict, dev_match_verdict
+
+### Schema Adjustment — Approval Status
+The plan specified a single `approval_status` field on `Recommendation`, but the product requires independent approval for execution-mode and developer-match decisions. A single field cannot represent these independently.
+
+**Resolution (minimal):** replaced `approval_status` with two independent sets:
+- `mode_approval_status` / `mode_approved_by` / `mode_approved_at` / `mode_override_reason`
+- `dev_match_approval_status` / `dev_match_approved_by` / `dev_match_approved_at` / `dev_match_override_reason`
+
+Ticket prioritization is advisory — no approval gate needed.
+
+### Endpoints Implemented
+| Method | Path | Status |
+|--------|------|--------|
+| GET | /api/health | ✅ Milestone 1 |
+| GET | /api/stories | ✅ Milestone 2 |
+| POST | /api/stories/import | ✅ Milestone 2 |
+| GET | /api/stories/{id} | ✅ Milestone 2 |
+| GET | /api/developer-profiles | ✅ Milestone 2 |
+| POST | /api/developer-profiles/import-sample | ✅ Milestone 2 |
+
+### Jira Service
+- `fetch_from_jira(jira_key)` — calls Jira REST API v3, validates custom field keys for story points and AC, returns `source_status` and `source_warning` on every code path
+- `load_sample_stories()` / `load_sample_developer_profiles()` — loads from JSON files, enforces `source="sample"`
+- Never silently substitutes sample data for a failed Jira import
+- `source_status` values: `"jira"` | `"sample_import"` | `"credentials_missing"` | `"jira_error"`
+
+### Sample Data
+- `backend/sample_data/stories.json` — 3 PIE-domain stories (PIE-42, PIE-38, PIE-45), clearly labeled `[SAMPLE DATA]`
+- `backend/sample_data/developer_profiles.json` — 3 developer profiles (Alex Chen, Priya Nair, Jordan Kim), clearly labeled
+
+### Tests
+- 33 pytest tests in `backend/tests/test_milestone2.py` — all passing
+- Run from project root: `python3 -m pytest backend/tests/test_milestone2.py -v`
+
 ## Key Decisions
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Navigation | Wizard-style (4 linear steps) | Demo clarity |
+| Navigation | Wizard-style (4 screens — dev-match removed) | Demo clarity; developer match deferred |
 | Sample story | PIE-domain ("Add portfolio rebalancing endpoint") | Realistic domain context |
-| Jira fallback | Sample data when credentials absent | Demo works without credentials |
-| Recommendation logic | Pure rule engine | Transparent, no invented probabilities |
+| Jira fallback | Explicit `source_status` + `source_warning` on failure; no silent substitution | Demo transparency |
+| Recommendation logic | Pure rule engine — priority + execution mode only | Developer match deferred to future phase |
 | Bob session capture | Explicit POST (no telemetry assumed) | Confirmed: Bob has no session-history API |
-| DB | In-memory SQLite | Zero-config MVP; swap URL to persist |
+| DB | File-backed SQLite (`bob_intelligence.db`) | Records persist across restarts; tests use isolated `bob_intelligence_test.db` |
+| Story points | Imported metadata only — not used for recommendations | Out of scope per MVP rules |
+| Approval status | `mode_approval_status` only in MVP; `dev_match_approval_status` in model but unused | Developer match deferred |
+| Developer match | **DEFERRED** — model + sample data preserved; no ranking, skill verification, team matching, or GitHub integration | Deferred to Milestone 8 (future phase) |
+
+## How to Configure Jira
+
+Set the following in `backend/.env` (copy from `.env.example`):
+
+```bash
+JIRA_BASE_URL=https://yourorg.atlassian.net
+JIRA_USER_EMAIL=you@example.com
+JIRA_API_TOKEN=your_token   # https://id.atlassian.com/manage-profile/security/api-tokens
+
+# Validate these by calling:
+#   GET /rest/api/3/issue/{key}?expand=names
+# on a known story and inspecting the returned field names.
+JIRA_STORY_POINTS_FIELD=customfield_10016   # verify — varies by instance
+JIRA_AC_FIELD=                              # verify — varies by instance; leave blank if unknown
+```
+
+If any credential is missing, `POST /api/stories/import` with `import_source="jira"` returns
+`source_status="credentials_missing"` and a non-empty `source_warning`. No sample data is
+substituted silently.
+
+## How to Import Sample Data
+
+Sample data import is an explicit action — it is never triggered automatically.
+
+```bash
+# Import sample stories (idempotent — duplicates skipped)
+curl -X POST http://localhost:8000/api/stories/import \
+  -H "Content-Type: application/json" \
+  -d '{"import_source": "sample"}'
+
+# Import sample developer profiles (idempotent — duplicates skipped)
+curl -X POST http://localhost:8000/api/developer-profiles/import-sample
+```
+
+Both endpoints skip records already in the DB (matched by `jira_key` / `jira_account_id`)
+and return `skipped_duplicates` in the response.
+
+## How to Run the Backend
+
+```bash
+# From project root
+pip3 install -r backend/requirements.txt
+uvicorn backend.main:app --reload --port 8000
+
+# Health check
+curl http://localhost:8000/api/health   # → {"status":"ok"}
+```
+
+`bob_intelligence.db` is created automatically in the project root on first startup.
+
+## How to Run Tests
+
+```bash
+# Always run from project root, not from backend/
+pip3 install -r backend/requirements-dev.txt
+python3 -m pytest backend/tests/test_milestone2.py -v
+# Expected: 33 passed
+```
+
+Tests use `bob_intelligence_test.db` (created and deleted automatically).
+Production `bob_intelligence.db` is never touched by tests.
 
 ## Known Limitations
 
-- In-memory SQLite: all data lost on backend restart (intentional for MVP).
-- Bob session data is manually entered; no automatic capture from Bob.
-- Jira custom field keys (story points, AC) vary by instance — must validate during Milestone 2.
-- Frontend pages are placeholder shells; real UI implemented in Milestone 6.
-- Git evidence capture (Milestone 4) unverified until tested with real PIE repo path.
+- **Developer match deferred.** `DeveloperProfile` model, sample data, `GET /api/developer-profiles`, and `POST /api/developer-profiles/import-sample` are preserved but not used for recommendations in the current MVP. Developer ranking, skill verification, team matching, and GitHub/Jira bootstrap are out of scope until Milestone 8.
+- **Jira custom field keys unverified on real instance.** `JIRA_STORY_POINTS_FIELD` and `JIRA_AC_FIELD` vary by instance. The service validates their presence and returns a `source_warning` if missing, but correct values must be confirmed against a real Jira instance via `GET /rest/api/3/issue/{key}?expand=names`.
+- **`linked_prs` always empty on Jira import.** The dev-status API call needed to populate PR links requires a separate HTTP call; deferred to Milestone 4.
+- **Recommendation engine not yet built.** Milestone 3 pending (priority + execution mode only).
+- **Bob session association is manual.** No automatic hook — confirmed design, not a bug.
+- **Frontend pages are placeholder shells.** Real UI in Milestone 6.
+- **Git evidence capture unverified.** Requires Milestone 4 and a real PIE repo path.
 
 ## Next Steps
 
-1. **Milestone 2** — Implement ORM models, `POST /api/stories/import`, `GET /api/stories`, Jira service with fallback.
-2. Validate Jira field keys on a real story before writing the parser.
+1. **Milestone 3** — Recommendation engine: `POST /api/recommendations`, `GET /api/recommendations/{id}`, `PATCH .../mode-approve`, `PATCH .../mode-override`. Rule engine for priority + execution mode. Approval gate enforcement.
+2. **Milestone 4** — Bob session link and git evidence capture.
+3. **Milestone 5** — Outcome recording and mode comparison.
+4. **Milestone 6** — React frontend (4-screen wizard, no Developer Match screen).
+5. **Milestone 7** — Smoke test and demo readiness.
+6. **Milestone 8 (future)** — Developer match: Jira/GitHub bootstrap, skill verification, team matching, dev-match approval gate.
