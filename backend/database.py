@@ -1,11 +1,12 @@
 """
 Database engine and session factory.
 
-Uses an in-memory SQLite database for the MVP.
-Swap DATABASE_URL to a file path or PostgreSQL URL to persist across restarts.
+Production:  file-backed SQLite at ./bob_intelligence.db
+Tests:       isolated file at ./bob_intelligence_test.db
+             (configured by setting DATABASE_URL in conftest.py before importing
+              this module, or by overriding app dependencies)
 
-This module is a stub for Milestone 1.
-ORM models and table creation will be added in Milestone 2.
+Milestone 2: updated from in-memory stub to file-backed SQLite.
 """
 
 import os
@@ -16,10 +17,12 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 load_dotenv()
 
-DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///:memory:")
+# Default to file-backed SQLite for production; tests override this via the
+# TEST_DATABASE_URL environment variable set in conftest.py.
+_DEFAULT_DATABASE_URL = "sqlite:///./bob_intelligence.db"
+DATABASE_URL: str = os.getenv("DATABASE_URL") or _DEFAULT_DATABASE_URL
 
-# check_same_thread=False is required for SQLite when used with FastAPI's
-# threaded request handling.
+# check_same_thread=False is required for SQLite with FastAPI's threaded handling.
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
 engine = create_engine(DATABASE_URL, connect_args=connect_args)
@@ -38,3 +41,10 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def init_db() -> None:
+    """Create all tables.  Safe to call on every startup (no-op if tables exist)."""
+    # Import models so their table metadata is registered on Base before create_all.
+    import backend.models  # noqa: F401
+    Base.metadata.create_all(bind=engine)
