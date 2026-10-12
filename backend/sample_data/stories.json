@@ -1,0 +1,47 @@
+[
+  {
+    "_comment": "SAMPLE DATA — source: 'sample'. Never produced by a live Jira import.",
+    "jira_key": "PIE-42",
+    "title": "Add portfolio rebalancing endpoint",
+    "description": "As a portfolio manager, I want a REST endpoint that evaluates the current asset allocation of a portfolio against a target allocation model and returns a list of rebalancing trade recommendations.\n\nThe endpoint must:\n- Accept a portfolio ID and an optional target model ID.\n- Return a list of trades (asset, action: buy/sell, quantity, estimated value).\n- Handle portfolios with zero positions gracefully (return empty trades list).\n- Apply the default target model when no model ID is provided.\n- Respond within 500ms for portfolios up to 200 positions.\n\nOut of scope: actual order execution. This endpoint is advisory only.",
+    "acceptance_criteria": "1. GET /api/portfolios/{id}/rebalance returns HTTP 200 with a trades array.\n2. Each trade item contains: asset_symbol (string), action ('buy'|'sell'), quantity (number), estimated_value_usd (number).\n3. An empty portfolio returns HTTP 200 with an empty trades array (not 404).\n4. Invalid portfolio ID returns HTTP 404.\n5. Missing or invalid target model ID returns HTTP 422.\n6. Response time is under 500ms for a 200-position portfolio (measured in integration test).\n7. Unit tests cover: happy path, empty portfolio, invalid portfolio ID, missing model ID.",
+    "story_points": 5,
+    "labels": ["api", "portfolio", "rebalancing", "backend"],
+    "priority": "high",
+    "status": "Ready for Dev",
+    "assignee": null,
+    "blockers": [],
+    "linked_prs": [],
+    "source": "sample"
+  },
+  {
+    "_comment": "SAMPLE DATA — source: 'sample'. Never produced by a live Jira import.",
+    "jira_key": "PIE-38",
+    "title": "Migrate portfolio service config to environment variables",
+    "description": "The portfolio service currently has hardcoded database connection strings and API keys in the source code. These must be migrated to environment variables before the next production release.\n\nAffected files: config.py, db/connection.py, services/market_data.py.\n\nThis is a refactor — no functional changes to API behavior expected.",
+    "acceptance_criteria": "1. No secrets or connection strings appear in committed source code.\n2. A .env.example file documents all required variables.\n3. Application starts correctly when environment variables are set.\n4. Existing integration tests pass unchanged.",
+    "story_points": 3,
+    "labels": ["config", "security", "refactor", "backend"],
+    "priority": "highest",
+    "status": "In Progress",
+    "assignee": "alex.chen",
+    "blockers": ["PIE-35"],
+    "linked_prs": [],
+    "source": "sample"
+  },
+  {
+    "_comment": "SAMPLE DATA — source: 'sample'. Never produced by a live Jira import.",
+    "jira_key": "PIE-45",
+    "title": "Add dark mode toggle to dashboard",
+    "description": "Users have requested a dark mode option for the portfolio dashboard. Implement a toggle in the user settings panel that switches between light and dark themes and persists the preference across sessions.\n\nOpen unknowns:\n- Should the preference be stored in localStorage, a user profile DB column, or both?\n- What happens when a user logs in on a different device — should the preference sync?\n- Accessibility contrast ratios must be verified for all interactive components in dark mode.",
+    "acceptance_criteria": "1. A toggle is visible in the user settings panel.\n2. Selecting dark mode applies the dark theme immediately without a page reload.\n3. The preference persists across browser sessions (localStorage minimum).\n4. All text meets WCAG AA contrast ratio in both modes.\n5. Automated accessibility tests pass for both themes.",
+    "story_points": 8,
+    "labels": ["frontend", "ui", "accessibility", "settings"],
+    "priority": "medium",
+    "status": "To Do",
+    "assignee": null,
+    "blockers": ["PIE-43", "PIE-44"],
+    "linked_prs": [],
+    "source": "sample"
+  }
+]
