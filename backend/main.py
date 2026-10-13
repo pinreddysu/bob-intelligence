@@ -3,6 +3,8 @@ Bob Intelligence — FastAPI application entry point.
 
 Milestone 1: health endpoint.
 Milestone 2: ORM init, stories router, developer-profiles router.
+Milestone 3: recommendations router (priority + mode), approval/override endpoints,
+             downstream 409 gates on bob-sessions and outcomes.
 """
 
 from contextlib import asynccontextmanager
@@ -13,6 +15,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.database import init_db
 from backend.routers import stories
 from backend.routers import developer_profiles
+from backend.routers import recommendations
+from backend.routers import bob_sessions
+from backend.routers import outcomes
 
 
 @asynccontextmanager
@@ -25,7 +30,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Bob Intelligence",
     description="Explainable Bob/Collaborative/Human-led execution recommendations for Jira stories.",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
@@ -41,6 +46,9 @@ app.add_middleware(
 # Register routers
 app.include_router(stories.router)
 app.include_router(developer_profiles.router)
+app.include_router(recommendations.router)
+app.include_router(bob_sessions.router)
+app.include_router(outcomes.router)
 
 
 @app.get("/api/health", tags=["health"])
