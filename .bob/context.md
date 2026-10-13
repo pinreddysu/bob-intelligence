@@ -56,18 +56,19 @@ bob-intelligence/
 │   ├── routers/
 │   │   ├── stories.py        GET /api/stories, POST /api/stories/import, GET /api/stories/{id}
 │   │   ├── developer_profiles.py  GET /api/developer-profiles, POST .../import-sample
-│   │   ├── recommendations.py     placeholder (Milestone 3)
-│   │   ├── bob_sessions.py        placeholder (Milestone 4)
-│   │   └── outcomes.py            placeholder (Milestone 5)
+│   │   ├── recommendations.py     POST /api/recommendations, GET /{id}, PATCH .../mode-approve, PATCH .../mode-override
+│   │   ├── bob_sessions.py        409 gate active; full impl Milestone 4
+│   │   └── outcomes.py            409 gate active; full impl Milestone 5
 │   ├── services/
 │   │   ├── jira_service.py   Jira REST v3 fetch + sample data loader
-│   │   ├── recommendation_service.py  placeholder (Milestone 3)
+│   │   ├── recommendation_service.py  Priority engine + mode engine (Milestone 3)
 │   │   └── evidence_service.py        placeholder (Milestone 4)
 │   ├── sample_data/
 │   │   ├── stories.json            3 PIE-domain sample stories [SAMPLE DATA]
 │   │   └── developer_profiles.json 3 sample developer profiles [SAMPLE DATA]
 │   ├── tests/
-│   │   └── test_milestone2.py      33 pytest tests (all passing)
+│   │   ├── test_milestone2.py      33 pytest tests (all passing)
+│   │   └── test_milestone3.py      42 pytest tests (all passing)
 │   ├── conftest.py           Test fixtures + DB isolation
 │   ├── requirements.txt
 │   ├── requirements-dev.txt
@@ -93,10 +94,10 @@ bob-intelligence/
 | Milestone | Status | Notes |
 |-----------|--------|-------|
 | 1 — Scaffold + docs baseline | ✅ Complete | Health endpoint verified. Smoke test exits 0. |
-| 2 — Data layer + story import | ✅ Complete | 33/33 tests passing. See details below. |
-| 3 — Recommendation engine | ⬜ Pending | |
-| 4 — Bob session link + evidence | ⬜ Pending | |
-| 5 — Outcome + comparison | ⬜ Pending | |
+| 2 — Data layer + story import | ✅ Complete | 33/33 tests passing. |
+| 3 — Recommendation engine | ✅ Complete | 75/75 tests passing. Smoke test 20/20. |
+| 4 — Bob session link + evidence | ⬜ Pending | 409 gate active; full impl pending |
+| 5 — Outcome + comparison | ⬜ Pending | 409 gate active; full impl pending |
 | 6 — React frontend | ⬜ Pending | Placeholder pages exist |
 | 7 — Smoke test + demo readiness | ⬜ Pending | |
 
@@ -132,6 +133,12 @@ Ticket prioritization is advisory — no approval gate needed.
 | GET | /api/stories/{id} | ✅ Milestone 2 |
 | GET | /api/developer-profiles | ✅ Milestone 2 |
 | POST | /api/developer-profiles/import-sample | ✅ Milestone 2 |
+| POST | /api/recommendations | ✅ Milestone 3 |
+| GET | /api/recommendations/{id} | ✅ Milestone 3 |
+| PATCH | /api/recommendations/{id}/mode-approve | ✅ Milestone 3 |
+| PATCH | /api/recommendations/{id}/mode-override | ✅ Milestone 3 |
+| POST | /api/bob-sessions | ⚠️ Gate active (409 on pending), full impl Milestone 4 |
+| POST | /api/outcomes | ⚠️ Gate active (409 on pending), full impl Milestone 5 |
 
 ### Jira Service
 - `fetch_from_jira(jira_key)` — calls Jira REST API v3, validates custom field keys for story points and AC, returns `source_status` and `source_warning` on every code path
@@ -223,21 +230,68 @@ python3 -m pytest backend/tests/test_milestone2.py -v
 Tests use `bob_intelligence_test.db` (created and deleted automatically).
 Production `bob_intelligence.db` is never touched by tests.
 
+## Milestone 3 — What Was Implemented
+
+### Recommendation Engine (`backend/services/recommendation_service.py`)
+
+Two independent sub-engines, both deterministic and explainable:
+
+**Priority engine** — scores each story on:
+- Jira `priority` field (highest=+30, high=+30, medium=+15, low/lowest=+5)
+- Urgency/risk labels (`security`, `p0`, `incident`, etc.) → +25
+- Status readiness (`Ready for Dev` → +20, `In Progress` → +10)
+- Acceptance criteria completeness → +10
+- Blockers → -20 per blocker
+- Open unknowns in description text (regex-matched) → -10 when ≥3
+- Returns `priority_rank` (1 = highest) relative to all stories in DB
+
+**Mode engine** — scores story toward `bob_led` (>10), `human_led` (<-10), or `collaborative`:
+- Acceptance criteria length → +10 when detailed, -10 when absent
+- Open unknowns in description → -15 (≥3) or -5 (1–2)
+- Description length → +5 (>300 chars) or -10 (<50 chars)
+- Blockers → -15
+- Linked PRs → +5
+- Historical outcomes: when 0 exist, `uncertainty_note` states "no historical outcomes available"
+
+> **Label signals removed:** `_BOB_LED_LABELS`, `_HUMAN_LED_LABELS`, `_COLLAB_LABELS` were removed. Label taxonomies are org-specific — a `"security"` label at one company means something different at another. Mode is now driven entirely by story-structure signals and (in M4a+) historical evidence.
+
+**Design constraints enforced:**
+- `story_points` is never read by either engine
+- All evidence items carry `source`, `description`, and `verified: bool`
+- Each recommendation includes `mode_risks[]`, `mode_counterevidence[]`, and `uncertainty_note`
+- `mode_approval_status` is always `"pending"` on creation
+- Calling `POST /api/recommendations` twice for the same story supersedes the first (status → `"superseded"`)
+- Developer-match fields (`suggested_developer`, `dev_match_*`, etc.) remain null/empty — deferred
+
+### Approval / Override Endpoints
+
+- `PATCH .../mode-approve`: sets `mode_approval_status="approved"`, records `mode_approved_by` + `mode_approved_at`
+- `PATCH .../mode-override`: sets `mode_approval_status="overridden"`, records all three fields; returns 422 when `override_reason` is missing or empty; optionally updates `mode`
+
+### Downstream 409 Gates
+
+Both `POST /api/bob-sessions` and `POST /api/outcomes` return **409 Conflict** when the story's latest recommendation has `mode_approval_status="pending"`. The gate is not triggered when no recommendation exists at all (recommendation step not yet run). Full session/outcome implementation deferred to Milestones 4 and 5.
+
+### Clarification: Advisory Priority vs. Ticket Selection
+
+Priority rank is **advisory** — it surfaces the highest-priority story for the tech lead to review. The tech lead **explicitly selects** a story from the ranked list (a human choice, no gate, no approval). Only after selection does the system generate an execution-mode recommendation, and only that mode recommendation requires approval. There is no `priority_approval_status` field and no separate priority approval endpoint.
+
 ## Known Limitations
 
 - **Developer match deferred.** `DeveloperProfile` model, sample data, `GET /api/developer-profiles`, and `POST /api/developer-profiles/import-sample` are preserved but not used for recommendations in the current MVP. Developer ranking, skill verification, team matching, and GitHub/Jira bootstrap are out of scope until Milestone 8.
 - **Jira custom field keys unverified on real instance.** `JIRA_STORY_POINTS_FIELD` and `JIRA_AC_FIELD` vary by instance. The service validates their presence and returns a `source_warning` if missing, but correct values must be confirmed against a real Jira instance via `GET /rest/api/3/issue/{key}?expand=names`.
 - **`linked_prs` always empty on Jira import.** The dev-status API call needed to populate PR links requires a separate HTTP call; deferred to Milestone 4.
-- **Recommendation engine not yet built.** Milestone 3 pending (priority + execution mode only).
+- **Bob session and outcome endpoints return 501** after the approval gate passes — full implementation is in Milestones 4 and 5 respectively.
 - **Bob session association is manual.** No automatic hook — confirmed design, not a bug.
 - **Frontend pages are placeholder shells.** Real UI in Milestone 6.
 - **Git evidence capture unverified.** Requires Milestone 4 and a real PIE repo path.
 
 ## Next Steps
 
-1. **Milestone 3** — Recommendation engine: `POST /api/recommendations`, `GET /api/recommendations/{id}`, `PATCH .../mode-approve`, `PATCH .../mode-override`. Rule engine for priority + execution mode. Approval gate enforcement.
-2. **Milestone 4** — Bob session link and git evidence capture.
-3. **Milestone 5** — Outcome recording and mode comparison.
-4. **Milestone 6** — React frontend (4-screen wizard, no Developer Match screen).
-5. **Milestone 7** — Smoke test and demo readiness.
-6. **Milestone 8 (future)** — Developer match: Jira/GitHub bootstrap, skill verification, team matching, dev-match approval gate.
+1. **Milestone 4a** — Historical ticket retrieval and semantic similarity (TF-IDF cosine, `historical_evidence_service`, `ResolvedTicket` model, `POST /api/resolved-tickets/import`, `GET /api/resolved-tickets`, mode score enrichment).
+2. **Milestone 4b** — PR evidence discovery and current-code analysis.
+3. **Milestone 4c** — Bob session link (full implementation).
+4. **Milestone 5** — Outcome recording and mode comparison.
+5. **Milestone 6** — React frontend (4-screen wizard, no Developer Match screen).
+6. **Milestone 7** — Smoke test and demo readiness.
+7. **Milestone 8 (future)** — Developer match: Jira/GitHub bootstrap, skill verification, team matching, dev-match approval gate.

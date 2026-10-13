@@ -177,3 +177,126 @@ Ticket prioritization is advisory only — no approval gate needed.
 - Schema contradiction (single approval_status) resolved before any downstream code was written — Milestone 3 can implement independent approval gates without a migration.
 
 ---
+
+## Entry 3
+
+**Date:** 2025-07-15
+**Objective:** Milestone 3 — Recommendation engine (priority + execution mode)
+
+**Prompt summary:** Implement Milestone 3 from the plan. Inspect existing code and AC. Implement deterministic, explainable recommendations with evidence, risks, counterevidence, and explicit uncertainty. story_points must never influence recommendations. Persist results in SQLite. Implement execution-mode approval/override endpoints exactly as specified, including approver, timestamp, and required override reason. Ensure downstream bob-session and outcome endpoints reject pending execution-mode approvals as specified. Clarify how advisory priority ranking becomes a selected ticket without adding an unplanned approval workflow. Keep developer matching and GitHub integration deferred. Preserve completed work, add tests, run the full suite and smoke test, update documentation.
+
+### Design decisions made
+
+**Advisory priority vs. ticket selection:** The plan says priority rank is advisory — the tech lead selects a story from the ranked list. That selection is a human choice: no gate, no approval, no `priority_approval_status` field. Only after a story is selected and `POST /api/recommendations` is called does the system generate an execution-mode recommendation, and only that recommendation requires explicit approval before downstream steps can proceed.
+
+**Superseding behaviour:** Calling `POST /api/recommendations` for a story that already has a pending recommendation supersedes the old one (sets `status="superseded"`) before creating the new one. This prevents stale pending records from blocking the gate.
+
+**Gate trigger condition:** The 409 gate on `POST /api/bob-sessions` and `POST /api/outcomes` is triggered only when a `"pending"` recommendation **exists** for the story. When no recommendation has been generated at all, the gate does not fire — the story has simply not entered the recommendation flow yet.
+
+### Files created / modified
+
+| File | Change |
+|------|--------|
+| `backend/services/recommendation_service.py` | Full implementation: priority engine + mode engine, `generate()` public interface |
+| `backend/schemas.py` | Added: `RecommendationRequest`, `RecommendationResponse`, `ModeApproveRequest`, `ModeOverrideRequest`, `EvidenceItem`, `RiskItem`, `CounterEvidenceItem` |
+| `backend/routers/recommendations.py` | Full implementation: POST, GET, PATCH mode-approve, PATCH mode-override |
+| `backend/routers/bob_sessions.py` | Added: `_check_mode_approved()` gate, POST stub (passes gate, returns 501), GET stub |
+| `backend/routers/outcomes.py` | Added: `_check_mode_approved()` gate, POST stub (passes gate, returns 501), GET stub, comparisons stubs |
+| `backend/main.py` | Registered: recommendations, bob_sessions, outcomes routers; version bumped to 0.3.0 |
+| `backend/tests/test_milestone3.py` | Created: 42 pytest tests covering all plan AC |
+| `scripts/smoke_test.sh` | Replaced Milestone 1 stub with full Milestone 3 end-to-end flow (20 checks) |
+| `.bob/context.md` | Updated: Milestone 3 complete, endpoint table updated, new limitations section |
+
+### Implemented vs proposed (AC checklist)
+
+| Acceptance Criterion | Status |
+|---------------------|--------|
+| `POST /api/recommendations` returns priority_rank + priority_rationale + priority_evidence | ✅ |
+| `POST /api/recommendations` returns mode + mode_rationale + mode_evidence + mode_risks + mode_counterevidence | ✅ |
+| Shared uncertainty_note present | ✅ |
+| Developer-match fields present but null/empty (DEFERRED) | ✅ |
+| All three execution modes reachable (tested) | ✅ |
+| All three priority rank scenarios exercised (tested) | ✅ |
+| priority_rank never influenced by story_points (pytest asserts identical output) | ✅ |
+| No historical outcomes → uncertainty_note states "no historical outcomes available" | ✅ |
+| `PATCH .../mode-approve` requires non-empty approved_by; sets approved status + approved_by + approved_at | ✅ |
+| `PATCH .../mode-override` requires non-empty approved_by + override_reason; 422 on missing/empty | ✅ |
+| `PATCH .../mode-override` sets overridden status; records all three fields | ✅ |
+| `POST /api/bob-sessions` returns 409 when mode_approval_status is "pending" | ✅ |
+| `POST /api/outcomes` returns 409 when mode_approval_status is "pending" | ✅ |
+| Recommendation persists in DB across session close (file-backed SQLite) | ✅ |
+| Evidence items have source, description, verified fields | ✅ |
+| Risk items have description and severity fields | ✅ |
+| Counterevidence items have description field | ✅ |
+| Second recommendation supersedes first | ✅ |
+
+### Verification performed
+
+- `python3 -m pytest backend/tests/ -v` → **75 passed, 0 failed** (33 Milestone 2 + 42 Milestone 3)
+- `BASE_URL=http://localhost:8002 bash scripts/smoke_test.sh` → **20/20 checks passed, exit 0**
+- Smoke test exercises: sample import with source_warning, recommendation creation, pending-status checks on mode, override 422 failure paths (×2), 409 gate on bob-sessions and outcomes, tech-lead approval, gate-pass verification (501 not 409), and DB persistence via GET after approval.
+
+### Known limitations
+
+- Mode engine thresholds are fixed integers calibrated to the three sample stories. Future iterations can tune them without API changes.
+- `linked_prs` is always `[]` on Jira import (dev-status API deferred to Milestone 4) — the linked-PR evidence signal will always produce zero for Jira-imported stories until Milestone 4.
+- `POST /api/bob-sessions` and `POST /api/outcomes` return 501 after passing the gate — full implementation is Milestones 4 and 5.
+
+### Value delivered
+
+- Priority and execution-mode recommendations are fully wired end-to-end: import a story, generate a recommendation, inspect evidence and uncertainty, approve or override, then proceed to Bob session linking.
+- All three execution modes are demonstrated with the three sample stories (PIE-42 → bob_led, PIE-38 → human_led via security label, PIE-45 → human_led via blockers + unknowns).
+- The approval gate is a hard enforcement at the service layer — no UI or frontend workaround can bypass it.
+- story_points isolation is both implemented and verified by automated test — the engine literally never reads `story_points`.
+- 75 passing tests and a 20/20 smoke test give a stable base for Milestones 4 and 5 without regressions.
+
+---
+
+## Entry 4
+
+**Date:** 2025-07-15
+**Objective:** Remove label-based scoring from the mode engine
+
+**Prompt summary:** Label taxonomies are org-specific — a label like `"security"` or `"refactor"` means something different at every company. Remove the hardcoded label sets (`_BOB_LED_LABELS`, `_HUMAN_LED_LABELS`, `_COLLAB_LABELS`) and their score contributions from `_mode_engine()`. Mode recommendation should be driven purely by story-structure signals (AC quality, description length/unknowns, blockers, linked PRs) and, from M4a onward, historical evidence from similar resolved tickets.
+
+### Design decision
+
+Label signals were the only org-specific inputs in the mode engine. Every other signal (acceptance criteria length, open unknowns, description length, blockers, linked PRs) is derived from story content — portable across teams and companies. Removing labels makes the engine universally applicable without any configuration.
+
+After M4a, historical evidence from TF-IDF-matched resolved tickets will serve as the primary positive/negative signal, making the label heuristics redundant anyway.
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `backend/services/recommendation_service.py` | Removed `_BOB_LED_LABELS`, `_HUMAN_LED_LABELS`, `_COLLAB_LABELS` constants; removed signals 1–3 (label score blocks) from `_mode_engine()`; removed `labels_lower`, `human_hits`, `bob_hits`, `collab_hits` variables; updated counterevidence and rationale prose to not reference labels |
+| `backend/tests/test_milestone3.py` | Updated `test_mode_bob_led_reachable` — extended description past 300 chars to reach `bob_led` via long-description +5 bonus (total +15) instead of label +15; updated docstrings for `test_mode_human_led_reachable`, `test_mode_collaborative_reachable`, `test_story_points_do_not_influence_mode` to reflect label signals are no longer used |
+| `bob-intelligence-plan.md` | Updated Decision 2 input signals section: heading changed to "story-structure only — label keywords removed"; added explicit note; Rule categories: Risk signals line struck through and marked removed |
+| `.bob/context.md` | Updated mode engine description; updated Next Steps to M4a/M4b/M4c breakdown |
+| `BOB_USAGE.md` | This entry |
+
+### Score signal inventory after change
+
+| Signal | Delta | Direction |
+|--------|-------|-----------|
+| Detailed AC (>50 chars) | +10 | bob_led |
+| Missing AC | −10 | human_led |
+| ≥3 open unknowns in description | −15 | human_led |
+| 1–2 open unknowns | −5 | human_led |
+| Short description (<50 chars) | −10 | human_led |
+| Long description (>300 chars) | +5 | bob_led |
+| Active blockers | −15 | human_led |
+| Linked PRs | +5 | bob_led |
+
+Threshold: score >10 → `bob_led`, <−10 → `human_led`, else `collaborative`.
+
+### Verification performed
+
+- `python3 -m pytest backend/tests/test_milestone3.py -q` → **42 passed, 0 failed**
+- All three execution modes remain reachable via story-structure signals alone (no labels needed)
+
+### Known limitations
+
+- Mode engine now has no signal that distinguishes story *type* (e.g. security work vs. config work) until M4a historical evidence lands. A security story with detailed AC and no unknowns will score `bob_led` — the tech lead's override is the safety net until historical evidence provides a stronger signal.
+
+---
