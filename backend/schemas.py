@@ -1,7 +1,8 @@
 """
-Pydantic request/response schemas — Milestone 2.
+Pydantic request/response schemas — Milestones 2 and 3.
 
-Covers: Story import, story listing, developer profile listing.
+Covers: Story import, story listing, developer profile listing,
+        recommendation generation, approval/override.
 """
 
 from __future__ import annotations
@@ -122,3 +123,110 @@ class DeveloperProfileListResponse(BaseModel):
 
     profiles: list[DeveloperProfileResponse]
     total: int
+
+
+# ---------------------------------------------------------------------------
+# Recommendation schemas
+# ---------------------------------------------------------------------------
+
+class RecommendationRequest(BaseModel):
+    """
+    Request body for POST /api/recommendations.
+    """
+    story_id: str = Field(..., description="ID of the story to generate recommendations for.")
+
+    model_config = {"json_schema_extra": {"examples": [
+        {"story_id": "some-uuid-here"},
+    ]}}
+
+
+class EvidenceItem(BaseModel):
+    source: str
+    description: str
+    verified: bool = True
+
+
+class RiskItem(BaseModel):
+    description: str
+    severity: str  # "low" | "medium" | "high"
+
+
+class CounterEvidenceItem(BaseModel):
+    description: str
+
+
+class RecommendationResponse(BaseModel):
+    """A full recommendation record as returned by the API."""
+
+    id: str
+    story_id: str
+
+    # Ticket prioritization
+    priority_rank: int | None
+    priority_rationale: str | None
+    priority_evidence: list[Any]
+
+    # Execution mode
+    mode: str | None  # "bob_led" | "collaborative" | "human_led"
+    mode_rationale: str | None
+    mode_evidence: list[Any]
+    mode_risks: list[Any]
+    mode_counterevidence: list[Any]
+
+    # Mode approval gate
+    mode_approval_status: str  # "pending" | "approved" | "overridden"
+    mode_approved_by: str | None
+    mode_approved_at: datetime | None
+    mode_override_reason: str | None
+
+    # Developer match — DEFERRED; present as null/empty in MVP
+    suggested_developer: str | None
+    dev_match_rationale: str | None
+    dev_match_evidence: list[Any]
+    dev_match_risks: list[Any]
+    is_stretch_assignment: bool
+    stretch_support_plan: str | None
+    dev_match_approval_status: str
+    dev_match_approved_by: str | None
+    dev_match_approved_at: datetime | None
+    dev_match_override_reason: str | None
+
+    # Shared
+    uncertainty_note: str | None
+    status: str  # "pending" | "superseded"
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ModeApproveRequest(BaseModel):
+    """
+    Request body for PATCH /api/recommendations/{id}/mode-approve.
+    approved_by must be non-empty.
+    """
+    approved_by: str = Field(
+        ...,
+        min_length=1,
+        description="Identifier of the tech lead approving the execution mode.",
+    )
+
+
+class ModeOverrideRequest(BaseModel):
+    """
+    Request body for PATCH /api/recommendations/{id}/mode-override.
+    Both approved_by and override_reason are required and must be non-empty.
+    """
+    approved_by: str = Field(
+        ...,
+        min_length=1,
+        description="Identifier of the tech lead overriding the execution mode.",
+    )
+    override_reason: str = Field(
+        ...,
+        min_length=1,
+        description="Required non-empty reason explaining why the recommended mode is overridden.",
+    )
+    mode: str | None = Field(
+        default=None,
+        description="Optional new mode to set when overriding ('bob_led'|'collaborative'|'human_led').",
+    )
