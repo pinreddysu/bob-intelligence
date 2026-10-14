@@ -1,8 +1,9 @@
 """
-Pydantic request/response schemas — Milestones 2 and 3.
+Pydantic request/response schemas — Milestones 2, 3, and 4a.
 
 Covers: Story import, story listing, developer profile listing,
-        recommendation generation, approval/override.
+        recommendation generation, approval/override,
+        resolved ticket import/listing (M4a).
 """
 
 from __future__ import annotations
@@ -155,6 +156,26 @@ class CounterEvidenceItem(BaseModel):
     description: str
 
 
+class SimilarTicketItem(BaseModel):
+    """A single similar resolved ticket as returned in recommendation responses."""
+
+    jira_key: str
+    title: str
+    similarity_score: float
+    resolution: str | None
+    mode_used: str | None
+    ac_met: bool | None
+
+
+class SupportingPRItem(BaseModel):
+    """A PR URL extracted from a resolved ticket's linked_prs list."""
+
+    url: str
+    merged: bool | None = None
+    files_changed: list[Any] = []
+    title: str | None = None
+
+
 class RecommendationResponse(BaseModel):
     """A full recommendation record as returned by the API."""
 
@@ -190,6 +211,12 @@ class RecommendationResponse(BaseModel):
     dev_match_approved_by: str | None
     dev_match_approved_at: datetime | None
     dev_match_override_reason: str | None
+
+    # Historical evidence (M4a) — defaults preserve backward compatibility
+    similar_tickets: list[Any] = []
+    supporting_prs: list[Any] = []
+    evidence_confidence: str = "none"   # "high"|"medium"|"low"|"none"
+    code_analysis_notes: str | None = None  # populated in M4b
 
     # Shared
     uncertainty_note: str | None
@@ -230,3 +257,72 @@ class ModeOverrideRequest(BaseModel):
         default=None,
         description="Optional new mode to set when overriding ('bob_led'|'collaborative'|'human_led').",
     )
+
+
+# ---------------------------------------------------------------------------
+# ResolvedTicket schemas (M4a)
+# ---------------------------------------------------------------------------
+
+class ResolvedTicketResponse(BaseModel):
+    """A single resolved ticket as returned by the API."""
+
+    id: str
+    jira_key: str
+    title: str
+    description: str | None
+    resolution: str | None
+    labels: list[Any]
+    linked_prs: list[Any]
+    files_changed: list[Any]
+    mode_used: str | None
+    ac_met: bool | None
+    was_reverted: bool
+    source: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ResolvedTicketImportRequest(BaseModel):
+    """
+    Request body for POST /api/resolved-tickets/import.
+
+    source="sample" loads from sample_data/resolved_tickets.json.
+    source="jira"   calls the Jira search API (JQL: project=PIE AND status=Done).
+    """
+
+    source: Literal["sample", "jira"] = Field(
+        ...,
+        description=(
+            "'sample' — import from built-in sample data. "
+            "'jira' — fetch resolved tickets from Jira using configured JQL."
+        ),
+    )
+
+    model_config = {"json_schema_extra": {"examples": [
+        {"source": "sample"},
+        {"source": "jira"},
+    ]}}
+
+
+class ResolvedTicketImportResponse(BaseModel):
+    """Response for POST /api/resolved-tickets/import."""
+
+    tickets: list[ResolvedTicketResponse]
+    source_status: str = Field(
+        description=(
+            "'sample_import' — loaded from built-in sample data. "
+            "'jira' — fetched from live Jira. "
+            "'credentials_missing' — Jira import requested but credentials absent. "
+            "'jira_error' — Jira API returned an error."
+        )
+    )
+    source_warning: str | None = None
+    skipped_duplicates: int = 0
+
+
+class ResolvedTicketListResponse(BaseModel):
+    """Response for GET /api/resolved-tickets."""
+
+    tickets: list[ResolvedTicketResponse]
+    total: int
