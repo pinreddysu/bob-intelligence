@@ -1,8 +1,9 @@
 """
-ORM models — Milestone 2.
+ORM models — Milestones 2, 3, 4a.
 
-All six entities:
-  Story, Recommendation, DeveloperProfile, BobSession, Outcome, Comparison
+Entities:
+  Story, Recommendation, DeveloperProfile, BobSession, Outcome, Comparison,
+  ResolvedTicket (NEW in M4a)
 
 Schema note (approval status contradiction resolved):
   The plan specified a single `approval_status` field on Recommendation, but the
@@ -24,6 +25,11 @@ Schema note (approval status contradiction resolved):
 
   This is the smallest change that allows each decision to be approved or
   overridden independently without a data-model rewrite in future milestones.
+
+M4a additions:
+  - ResolvedTicket ORM model added below Comparison.
+  - Recommendation gains: similar_tickets, supporting_prs, evidence_confidence,
+    code_analysis_notes (all nullable/defaulted for backward compatibility).
 """
 
 import uuid
@@ -180,6 +186,18 @@ class Recommendation(Base):
         DateTime(timezone=True), nullable=True
     )
     dev_match_override_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # ── Historical evidence (M4a) ─────────────────────────────────────────────
+    # List of {jira_key, title, similarity_score, resolution, mode_used, ac_met}
+    similar_tickets: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # Union of linked_prs from similar tickets: list of {url, title, merged, files_changed}
+    supporting_prs: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # "high" (≥3 similar with outcomes) | "medium" (1–2) | "low" (similar, no outcomes) | "none"
+    evidence_confidence: Mapped[str] = mapped_column(
+        String, nullable=False, default="none"
+    )
+    # Populated in M4b; null in M4a
+    code_analysis_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # ── Shared ────────────────────────────────────────────────────────────────
     uncertainty_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     # "pending" | "superseded"
@@ -296,3 +314,38 @@ class Comparison(Base):
     # Relationships
     recommendation: Mapped["Recommendation"] = relationship(back_populates="comparisons")
     outcome: Mapped["Outcome"] = relationship(back_populates="comparisons")
+
+
+# ---------------------------------------------------------------------------
+# ResolvedTicket (M4a)
+# ---------------------------------------------------------------------------
+
+class ResolvedTicket(Base):
+    """
+    A resolved Jira ticket imported for use as historical evidence.
+
+    Used by historical_evidence_service to find semantically similar tickets
+    and extract mode/outcome signals for the mode recommendation engine.
+    """
+
+    __tablename__ = "resolved_tickets"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    jira_key: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolution: Mapped[str | None] = mapped_column(String, nullable=True)  # "Done" | "Won't Fix" | etc.
+    labels: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # PR URLs discovered from Jira remotelinks / dev-status
+    linked_prs: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # Union of files across all linked PRs (populated in M4b from GitHub)
+    files_changed: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # "bob_led" | "collaborative" | "human_led" — populated from outcome records or sample data
+    mode_used: Mapped[str | None] = mapped_column(String, nullable=True)
+    ac_met: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    was_reverted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # "jira" | "sample"
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
