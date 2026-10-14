@@ -1,0 +1,96 @@
+[
+  {
+    "_comment": "SAMPLE DATA — resolved ticket; source='sample'. Overlaps with PIE-42 (portfolio rebalancing endpoint).",
+    "jira_key": "PIE-30",
+    "title": "Add portfolio performance summary endpoint",
+    "description": "As a portfolio manager, I want a REST endpoint that calculates the current performance metrics of a portfolio — total return, annualised return, benchmark delta — and returns them as a JSON response.\n\nThe endpoint must:\n- Accept a portfolio ID and an optional date range.\n- Return a summary object: total_return (%), annualised_return (%), benchmark_delta (%).\n- Handle portfolios with no history gracefully (return zeroed metrics, not 404).\n- Respond within 300ms for a standard portfolio.\n\nOut of scope: streaming or websocket updates.",
+    "resolution": "Done",
+    "labels": ["api", "portfolio", "backend", "performance"],
+    "linked_prs": [
+      "https://github.com/example/pie/pull/101"
+    ],
+    "files_changed": ["api/portfolios/performance.py", "tests/test_performance.py"],
+    "mode_used": "bob_led",
+    "ac_met": true,
+    "was_reverted": false,
+    "source": "sample"
+  },
+  {
+    "_comment": "SAMPLE DATA — resolved ticket; source='sample'. Overlaps with PIE-42 (portfolio rebalancing endpoint).",
+    "jira_key": "PIE-28",
+    "title": "Add portfolio allocation breakdown endpoint",
+    "description": "As a portfolio manager, I want a REST endpoint that returns the current asset allocation breakdown for a given portfolio, including percentage per asset class.\n\nThe endpoint must:\n- Accept a portfolio ID.\n- Return a list of asset class allocations: {asset_class, symbol, quantity, weight_pct}.\n- Return HTTP 404 for unknown portfolio IDs.\n- Respond within 400ms for portfolios up to 150 positions.\n\nOut of scope: rebalancing logic.",
+    "resolution": "Done",
+    "labels": ["api", "portfolio", "backend"],
+    "linked_prs": [
+      "https://github.com/example/pie/pull/92"
+    ],
+    "files_changed": ["api/portfolios/allocation.py", "tests/test_allocation.py"],
+    "mode_used": "bob_led",
+    "ac_met": true,
+    "was_reverted": false,
+    "source": "sample"
+  },
+  {
+    "_comment": "SAMPLE DATA — resolved ticket; source='sample'. Overlaps with PIE-38 (migrate config to environment variables).",
+    "jira_key": "PIE-22",
+    "title": "Migrate market data service config to environment variables",
+    "description": "The market data service has hardcoded API keys and endpoint URLs in the source code. These must be moved to environment variables before the next release.\n\nAffected files: services/market_data.py, config/settings.py.\n\nThis is a refactor — no functional changes to API behaviour expected. A .env.example file must document all required variables.",
+    "resolution": "Done",
+    "labels": ["config", "refactor", "backend", "security"],
+    "linked_prs": [
+      "https://github.com/example/pie/pull/78"
+    ],
+    "files_changed": ["services/market_data.py", "config/settings.py", ".env.example"],
+    "mode_used": "collaborative",
+    "ac_met": true,
+    "was_reverted": false,
+    "source": "sample"
+  },
+  {
+    "_comment": "SAMPLE DATA — resolved ticket; source='sample'. Overlaps with PIE-38 (migrate config to environment variables).",
+    "jira_key": "PIE-18",
+    "title": "Move database connection strings out of source code",
+    "description": "Database connection strings are currently hardcoded in db/connection.py. These must be replaced with environment variable lookups.\n\nAll connection strings must be read from environment variables at startup. A .env.example must document each variable. Application must fail fast with a clear error if required variables are absent.",
+    "resolution": "Done",
+    "labels": ["config", "security", "backend", "database"],
+    "linked_prs": [
+      "https://github.com/example/pie/pull/65"
+    ],
+    "files_changed": ["db/connection.py", ".env.example", "tests/test_connection.py"],
+    "mode_used": "collaborative",
+    "ac_met": true,
+    "was_reverted": false,
+    "source": "sample"
+  },
+  {
+    "_comment": "SAMPLE DATA — resolved ticket; source='sample'. Overlaps with PIE-45 (dark mode toggle for dashboard).",
+    "jira_key": "PIE-14",
+    "title": "Add light/dark theme toggle to settings panel",
+    "description": "Users have requested a visual theme toggle in the settings panel. Implement a switch that toggles between light and dark themes. The preference must persist across page reloads.\n\nThe toggle should be accessible — keyboard navigable and screen-reader labelled. Both themes must meet WCAG AA contrast ratios.\n\nOpen unknowns: Should preference sync across devices? Where is preference stored — localStorage or user profile?",
+    "resolution": "Done",
+    "labels": ["frontend", "ui", "accessibility", "settings", "theme"],
+    "linked_prs": [
+      "https://github.com/example/pie/pull/55"
+    ],
+    "files_changed": ["src/components/SettingsPanel.tsx", "src/styles/themes.css", "tests/SettingsPanel.test.tsx"],
+    "mode_used": "human_led",
+    "ac_met": false,
+    "was_reverted": false,
+    "source": "sample"
+  },
+  {
+    "_comment": "SAMPLE DATA — resolved ticket; source='sample'. Additional portfolio API ticket for depth.",
+    "jira_key": "PIE-11",
+    "title": "Add portfolio positions list endpoint",
+    "description": "As a portfolio manager, I want a REST endpoint to retrieve all current positions in a portfolio, including current market value and unrealised PnL.\n\nThe endpoint must:\n- Accept a portfolio ID.\n- Return a list of positions: {asset_symbol, quantity, average_cost, current_price, market_value, unrealised_pnl}.\n- Return HTTP 404 for unknown portfolio IDs.\n- Handle empty portfolios (return empty list, not error).",
+    "resolution": "Done",
+    "labels": ["api", "portfolio", "backend"],
+    "linked_prs": [],
+    "files_changed": ["api/portfolios/positions.py", "tests/test_positions.py"],
+    "mode_used": null,
+    "ac_met": null,
+    "was_reverted": false,
+    "source": "sample"
+  }
+]
