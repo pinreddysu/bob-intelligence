@@ -5,6 +5,7 @@ Milestone 1: health endpoint.
 Milestone 2: ORM init, stories router, developer-profiles router.
 Milestone 3: recommendations router (priority + mode), approval/override endpoints,
              downstream 409 gates on bob-sessions and outcomes.
+Milestone 4a: resolved-tickets router (import + list).
 """
 
 from contextlib import asynccontextmanager
@@ -18,6 +19,7 @@ from backend.routers import developer_profiles
 from backend.routers import recommendations
 from backend.routers import bob_sessions
 from backend.routers import outcomes
+from backend.routers import resolved_tickets
 
 
 @asynccontextmanager
@@ -30,7 +32,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Bob Intelligence",
     description="Explainable Bob/Collaborative/Human-led execution recommendations for Jira stories.",
-    version="0.3.0",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
@@ -49,6 +51,7 @@ app.include_router(developer_profiles.router)
 app.include_router(recommendations.router)
 app.include_router(bob_sessions.router)
 app.include_router(outcomes.router)
+app.include_router(resolved_tickets.router)
 
 
 @app.get("/api/health", tags=["health"])
