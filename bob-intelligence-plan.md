@@ -634,7 +634,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 
 ---
 
-### Milestone 4a — Historical ticket retrieval and semantic similarity ← **NEXT INCOMPLETE MILESTONE**
+### Milestone 4a — Historical ticket retrieval and semantic similarity
 
 **Intent:** Enrich the mode recommendation with semantically similar resolved PIE tickets, discovered via TF-IDF cosine similarity. This is the foundation for all subsequent historical-evidence features. Without it, PR evidence discovery (M4b) and self-learning (M5b) have no ticket corpus to work from.
 
@@ -664,11 +664,26 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 - [`backend/services/historical_evidence_service.py`](backend/services/historical_evidence_service.py) — new file; `find_similar(story, db)` and `build_pr_evidence(resolved_tickets)` functions
 - `backend/sample_data/resolved_tickets.json` — new file; ≥5 resolved PIE tickets
 
-**Status: `[ ] pending`**
+**Status: `[x] completed`**
+
+**Verified completion (all checks passed 2025):**
+- `ResolvedTicket` ORM model in [`backend/models.py`](backend/models.py).
+- `POST /api/resolved-tickets/import` with `source=sample` is idempotent (skipped_duplicates).
+- `POST /api/resolved-tickets/import` with `source=jira` returns `credentials_missing` when env vars absent.
+- `GET /api/resolved-tickets` returns all tickets with `total`.
+- `historical_evidence_service.find_similar()` — TF-IDF cosine similarity, threshold 0.25, top 5.
+- `POST /api/recommendations` response includes `similar_tickets`, `supporting_prs`, `evidence_confidence`, `code_analysis_notes`.
+- Mode score adjusted: +10 (≥2 bob_led+ac_met), −10 (was_reverted).
+- `uncertainty_note` includes "no similar resolved tickets found" when corpus empty or no match.
+- `code_analysis_notes` is null (M4b deferred).
+- `evidence_confidence`: "high" (≥3 with outcomes), "medium" (1–2), "low" (exist, no outcomes), "none".
+- `sample_data/resolved_tickets.json`: 6 resolved PIE tickets, overlap to PIE-42 and PIE-38; 4 have mode_used+ac_met.
+- All 50 new M4a tests pass; all 75 M1–M3 tests still pass (125/125 total).
+- Smoke test updated to exercise all M4a endpoints.
 
 ---
 
-### Milestone 4b — PR evidence discovery, LLM analysis, and outcome/session evidence
+### Milestone 4b — PR evidence discovery, LLM analysis, and outcome/session evidence ← **NEXT INCOMPLETE MILESTONE**
 
 **Intent:** Enrich PR evidence records with GitHub-sourced metadata (diff, files, test presence, revert detection) and replace pattern-matching with LLM-generated analysis of each PR diff against the new story. Wire `Outcome` and `BobSession` records for similar stories into the mode engine as direct evidence. This is the milestone that enables the full evidence flow: resolved ticket → PR diff → LLM analysis → outcome evidence → session intervention evidence → mode recommendation.
 

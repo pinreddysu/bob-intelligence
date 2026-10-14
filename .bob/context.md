@@ -8,10 +8,11 @@ For a selected story the product:
 1. Understands the story description, acceptance criteria, repository context, and risks.
 2. Recommends one of three execution modes: Bob-led, Collaborative, or Human-led.
 3. Explains the recommendation using evidence, risks, counterevidence, and uncertainty.
-4. Links the recommendation to actual Bob-assisted work.
-5. Records verifiable outcomes (changed files, test results, build results, AC met).
-6. Compares the original recommendation with the actual outcome.
-7. Preserves completed-task evidence to inform future recommendations.
+4. Enriches the mode recommendation with semantically similar resolved tickets (M4a).
+5. Links the recommendation to actual Bob-assisted work.
+6. Records verifiable outcomes (changed files, test results, build results, AC met).
+7. Compares the original recommendation with the actual outcome.
+8. Preserves completed-task evidence to inform future recommendations.
 
 ## Technology Stack
 
@@ -37,8 +38,9 @@ Browser (React/Vite :5173)
 FastAPI (backend/main.py :8000)
      ├── /api/stories              → jira_service  (Jira REST v3 or explicit sample import)
      ├── /api/developer-profiles   → sample import only (preserved; not used for recommendations in MVP)
-     ├── /api/recommendations      → recommendation_service (priority + mode — Milestone 3)
-     ├── /api/bob-sessions         → SQLite (manual explicit link — Milestone 4)
+     ├── /api/recommendations      → recommendation_service (priority + mode + M4a historical evidence)
+     ├── /api/resolved-tickets     → resolved_tickets router (import + list — Milestone 4a)
+     ├── /api/bob-sessions         → SQLite (manual explicit link — Milestone 4c)
      └── /api/outcomes             → evidence_service + SQLite (Milestone 5)
 ```
 
@@ -49,26 +51,33 @@ No automatic Bob session telemetry. Bob sessions are created by explicit POST.
 ```
 bob-intelligence/
 ├── backend/
-│   ├── main.py               FastAPI app + /api/health + lifespan DB init
+│   ├── main.py               FastAPI app + /api/health + lifespan DB init (v0.4.0)
 │   ├── database.py           SQLAlchemy engine + session + init_db()
-│   ├── models.py             ORM models (all 6 entities — Milestone 2)
-│   ├── schemas.py            Pydantic schemas (Story, DeveloperProfile — Milestone 2)
+│   ├── models.py             ORM: Story, Recommendation, DeveloperProfile, BobSession,
+│   │                                Outcome, Comparison, ResolvedTicket (M4a)
+│   ├── schemas.py            Pydantic schemas — Story, DeveloperProfile, Recommendation
+│   │                                (extended with M4a fields), ResolvedTicket
 │   ├── routers/
-│   │   ├── stories.py        GET /api/stories, POST /api/stories/import, GET /api/stories/{id}
-│   │   ├── developer_profiles.py  GET /api/developer-profiles, POST .../import-sample
-│   │   ├── recommendations.py     POST /api/recommendations, GET /{id}, PATCH .../mode-approve, PATCH .../mode-override
-│   │   ├── bob_sessions.py        409 gate active; full impl Milestone 4
-│   │   └── outcomes.py            409 gate active; full impl Milestone 5
+│   │   ├── stories.py            GET /api/stories, POST /api/stories/import, GET /api/stories/{id}
+│   │   ├── developer_profiles.py GET /api/developer-profiles, POST .../import-sample
+│   │   ├── recommendations.py    POST /api/recommendations, GET /{id},
+│   │   │                           PATCH .../mode-approve, PATCH .../mode-override
+│   │   ├── resolved_tickets.py   POST /api/resolved-tickets/import, GET /api/resolved-tickets (M4a)
+│   │   ├── bob_sessions.py       409 gate active; full impl Milestone 4c
+│   │   └── outcomes.py           409 gate active; full impl Milestone 5
 │   ├── services/
-│   │   ├── jira_service.py   Jira REST v3 fetch + sample data loader
-│   │   ├── recommendation_service.py  Priority engine + mode engine (Milestone 3)
-│   │   └── evidence_service.py        placeholder (Milestone 4)
+│   │   ├── jira_service.py              Jira REST v3 fetch + sample data loader
+│   │   ├── recommendation_service.py    Priority + mode engine + M4a historical evidence
+│   │   ├── historical_evidence_service.py  TF-IDF cosine similarity, evidence confidence (M4a)
+│   │   └── evidence_service.py          placeholder (Milestone 4b)
 │   ├── sample_data/
-│   │   ├── stories.json            3 PIE-domain sample stories [SAMPLE DATA]
+│   │   ├── stories.json            PIE sample open stories (user auth domain) [SAMPLE DATA]
+│   │   ├── resolved_tickets.json   PIE resolved tickets for M4a historical evidence [SAMPLE DATA]
 │   │   └── developer_profiles.json 3 sample developer profiles [SAMPLE DATA]
 │   ├── tests/
 │   │   ├── test_milestone2.py      33 pytest tests (all passing)
-│   │   └── test_milestone3.py      42 pytest tests (all passing)
+│   │   ├── test_milestone3.py      42 pytest tests (all passing)
+│   │   └── test_milestone4a.py     50 pytest tests (all passing)
 │   ├── conftest.py           Test fixtures + DB isolation
 │   ├── requirements.txt
 │   ├── requirements-dev.txt
@@ -83,7 +92,7 @@ bob-intelligence/
 │   ├── tsconfig.json
 │   └── package.json
 ├── scripts/
-│   └── smoke_test.sh         Milestone 1 health check (passes)
+│   └── smoke_test.sh         Milestone 4a end-to-end smoke test (M3 + M4a checks)
 ├── .bob/context.md
 ├── BOB_USAGE.md
 └── bob-intelligence-plan.md
@@ -93,11 +102,13 @@ bob-intelligence/
 
 | Milestone | Status | Notes |
 |-----------|--------|-------|
-| 1 — Scaffold + docs baseline | ✅ Complete | Health endpoint verified. Smoke test exits 0. |
+| 1 — Scaffold + docs baseline | ✅ Complete | Health endpoint verified. |
 | 2 — Data layer + story import | ✅ Complete | 33/33 tests passing. |
-| 3 — Recommendation engine | ✅ Complete | 75/75 tests passing. Smoke test 20/20. |
-| 4 — Bob session link + evidence | ⬜ Pending | 409 gate active; full impl pending |
-| 5 — Outcome + comparison | ⬜ Pending | 409 gate active; full impl pending |
+| 3 — Recommendation engine | ✅ Complete | 75/75 tests passing. |
+| 4a — Historical ticket retrieval + similarity | ✅ Complete | 125/125 tests passing. Smoke test updated. |
+| 4b — PR evidence + LLM analysis | ⬜ Pending | Next milestone |
+| 4c — Bob session link (full impl) | ⬜ Pending | 409 gate active |
+| 5 — Outcome + comparison | ⬜ Pending | 409 gate active |
 | 6 — React frontend | ⬜ Pending | Placeholder pages exist |
 | 7 — Smoke test + demo readiness | ⬜ Pending | |
 
@@ -125,20 +136,22 @@ The plan specified a single `approval_status` field on `Recommendation`, but the
 Ticket prioritization is advisory — no approval gate needed.
 
 ### Endpoints Implemented
-| Method | Path | Status |
-|--------|------|--------|
-| GET | /api/health | ✅ Milestone 1 |
-| GET | /api/stories | ✅ Milestone 2 |
-| POST | /api/stories/import | ✅ Milestone 2 |
-| GET | /api/stories/{id} | ✅ Milestone 2 |
-| GET | /api/developer-profiles | ✅ Milestone 2 |
-| POST | /api/developer-profiles/import-sample | ✅ Milestone 2 |
-| POST | /api/recommendations | ✅ Milestone 3 |
-| GET | /api/recommendations/{id} | ✅ Milestone 3 |
-| PATCH | /api/recommendations/{id}/mode-approve | ✅ Milestone 3 |
-| PATCH | /api/recommendations/{id}/mode-override | ✅ Milestone 3 |
-| POST | /api/bob-sessions | ⚠️ Gate active (409 on pending), full impl Milestone 4 |
-| POST | /api/outcomes | ⚠️ Gate active (409 on pending), full impl Milestone 5 |
+| Method | Path | Milestone | Status |
+|--------|------|-----------|--------|
+| GET | /api/health | M1 | ✅ |
+| GET | /api/stories | M2 | ✅ |
+| POST | /api/stories/import | M2 | ✅ |
+| GET | /api/stories/{id} | M2 | ✅ |
+| GET | /api/developer-profiles | M2 | ✅ |
+| POST | /api/developer-profiles/import-sample | M2 | ✅ |
+| POST | /api/recommendations | M3 | ✅ (enriched with M4a historical evidence) |
+| GET | /api/recommendations/{id} | M3 | ✅ (includes M4a fields) |
+| PATCH | /api/recommendations/{id}/mode-approve | M3 | ✅ |
+| PATCH | /api/recommendations/{id}/mode-override | M3 | ✅ |
+| POST | /api/resolved-tickets/import | M4a | ✅ |
+| GET | /api/resolved-tickets | M4a | ✅ |
+| POST | /api/bob-sessions | M4c | ⚠️ Gate active (409 on pending) |
+| POST | /api/outcomes | M5 | ⚠️ Gate active (409 on pending) |
 
 ### Jira Service
 - `fetch_from_jira(jira_key)` — calls Jira REST API v3, validates custom field keys for story points and AC, returns `source_status` and `source_warning` on every code path
@@ -147,12 +160,16 @@ Ticket prioritization is advisory — no approval gate needed.
 - `source_status` values: `"jira"` | `"sample_import"` | `"credentials_missing"` | `"jira_error"`
 
 ### Sample Data
-- `backend/sample_data/stories.json` — 3 PIE-domain stories (PIE-42, PIE-38, PIE-45), clearly labeled `[SAMPLE DATA]`
-- `backend/sample_data/developer_profiles.json` — 3 developer profiles (Alex Chen, Priya Nair, Jordan Kim), clearly labeled
+- `backend/sample_data/stories.json` — PIE sample open stories (user auth domain: PIE-2 login endpoint, PIE-4 JWT/Bcrypt), labeled `source="sample"`
+- `backend/sample_data/resolved_tickets.json` — PIE resolved tickets for M4a similarity (PIE-1 user create, PIE-3 request DTO), labeled `source="sample"` — **M4a**
+- `backend/sample_data/developer_profiles.json` — 3 developer profiles (Alex Chen, Priya Nair, Jordan Kim), labeled `source="sample"`
 
 ### Tests
-- 33 pytest tests in `backend/tests/test_milestone2.py` — all passing
-- Run from project root: `python3 -m pytest backend/tests/test_milestone2.py -v`
+- 33 pytest tests in [`backend/tests/test_milestone2.py`](backend/tests/test_milestone2.py) — all passing
+- 42 pytest tests in [`backend/tests/test_milestone3.py`](backend/tests/test_milestone3.py) — all passing
+- 50 pytest tests in [`backend/tests/test_milestone4a.py`](backend/tests/test_milestone4a.py) — all passing
+- **Total: 125/125 passing**
+- Run from project root: `python3 -m pytest backend/tests/ -v`
 
 ## Key Decisions
 
@@ -223,12 +240,57 @@ curl http://localhost:8000/api/health   # → {"status":"ok"}
 ```bash
 # Always run from project root, not from backend/
 pip3 install -r backend/requirements-dev.txt
-python3 -m pytest backend/tests/test_milestone2.py -v
-# Expected: 33 passed
+python3 -m pytest backend/tests/ -v
+# Expected: 125 passed
 ```
 
 Tests use `bob_intelligence_test.db` (created and deleted automatically).
 Production `bob_intelligence.db` is never touched by tests.
+
+## Milestone 4a — What Was Implemented
+
+### New ORM Model: `ResolvedTicket` ([`backend/models.py`](backend/models.py))
+
+Fields: `id`, `jira_key` (unique), `title`, `description`, `resolution`, `labels`, `linked_prs`, `files_changed`, `mode_used`, `ac_met`, `was_reverted`, `source`, `created_at`.
+
+Import is idempotent — duplicate `jira_key` records are skipped and counted in `skipped_duplicates`.
+
+### New Recommendation Fields ([`backend/models.py`](backend/models.py) + [`backend/schemas.py`](backend/schemas.py))
+
+Added to `Recommendation` and `RecommendationResponse`:
+- `similar_tickets[]` — list of `{jira_key, title, similarity_score, resolution, mode_used, ac_met}`
+- `supporting_prs[]` — union of `linked_prs` from similar tickets (GitHub enrichment deferred to M4b)
+- `evidence_confidence` — `"high"` (≥3 with outcomes) | `"medium"` (1–2) | `"low"` (exist, no outcomes) | `"none"`
+- `code_analysis_notes` — `null` in M4a (populated in M4b)
+
+All four fields default gracefully (empty lists / `"none"` / `null`) — full backward compatibility with M3.
+
+### Historical Evidence Service ([`backend/services/historical_evidence_service.py`](backend/services/historical_evidence_service.py))
+
+- **`find_similar(story, db)`** — TF-IDF cosine similarity (pure Python, no external deps). Tokenises `title + description + labels` for both story and each resolved ticket. Returns up to 5 tickets with score ≥ 0.25, ordered descending. Returns `[]` immediately when the corpus is empty.
+- **`build_supporting_prs(similar_tickets)`** — collects `linked_prs` from matched tickets, de-duped by URL. Title/merged/files_changed are `null`/`[]` until M4b GitHub enrichment.
+- **`compute_evidence_confidence(similar_tickets)`** — counts tickets with both `mode_used` and `ac_met` set; returns `"high"`/`"medium"`/`"low"`/`"none"`.
+- **`compute_mode_score_adjustment(similar_tickets)`** — returns `(delta, evidence_items)`:
+  - `+10` when ≥2 similar tickets have `mode_used="bob_led"` and `ac_met=True`
+  - `−10` when ≥1 similar ticket has `was_reverted=True`
+
+### New Endpoints ([`backend/routers/resolved_tickets.py`](backend/routers/resolved_tickets.py))
+
+- `POST /api/resolved-tickets/import` (source=`"sample"` or `"jira"`)
+  - `source="sample"`: loads `sample_data/resolved_tickets.json`, returns `source_status="sample_import"`, idempotent
+  - `source="jira"`: calls Jira search API with `JIRA_RESOLVED_JQL` env var; returns `source_status="credentials_missing"` when credentials absent — never substitutes sample data
+- `GET /api/resolved-tickets`: returns all records with `total`
+
+### Mode Engine Integration
+
+`recommendation_service.generate()` now calls `historical_evidence_service.find_similar()` before the mode engine, passes results to `_mode_engine()`, and persists all four M4a fields on the `Recommendation` record. `uncertainty_note` includes `"no similar resolved tickets found"` when the corpus is empty or no match meets the threshold.
+
+### Sample Data Domain (externally updated)
+
+The sample data was updated to a real Spring Boot user-auth project:
+- **Open stories**: PIE-2 (login endpoint), PIE-4 (JWT + Bcrypt)
+- **Resolved tickets**: PIE-1 (user create REST endpoint), PIE-3 (request DTO with validation)
+- Resolved tickets include real GitHub PR links, files_changed, mode_used, and ac_met
 
 ## Milestone 3 — What Was Implemented
 
@@ -278,20 +340,22 @@ Priority rank is **advisory** — it surfaces the highest-priority story for the
 
 ## Known Limitations
 
-- **Developer match deferred.** `DeveloperProfile` model, sample data, `GET /api/developer-profiles`, and `POST /api/developer-profiles/import-sample` are preserved but not used for recommendations in the current MVP. Developer ranking, skill verification, team matching, and GitHub/Jira bootstrap are out of scope until Milestone 8.
-- **Jira custom field keys unverified on real instance.** `JIRA_STORY_POINTS_FIELD` and `JIRA_AC_FIELD` vary by instance. The service validates their presence and returns a `source_warning` if missing, but correct values must be confirmed against a real Jira instance via `GET /rest/api/3/issue/{key}?expand=names`.
-- **`linked_prs` always empty on Jira import.** The dev-status API call needed to populate PR links requires a separate HTTP call; deferred to Milestone 4.
-- **Bob session and outcome endpoints return 501** after the approval gate passes — full implementation is in Milestones 4 and 5 respectively.
+- **Developer match deferred.** `DeveloperProfile` model, sample data, and list/import endpoints are preserved but not used for recommendations. Deferred to Milestone 8.
+- **Jira custom field keys unverified on real instance.** `JIRA_STORY_POINTS_FIELD` and `JIRA_AC_FIELD` vary by instance — service returns `source_warning` when missing.
+- **`linked_prs` always empty on Jira story import.** Dev-status API call deferred to Milestone 4b.
+- **`supporting_prs` has no GitHub metadata in M4a.** `merged`, `title`, `files_changed` are all null/empty — GitHub enrichment is M4b.
+- **`code_analysis_notes` is null in M4a.** Populated in M4b after LLM or shallow code inspection.
+- **Bob session and outcome endpoints return 501** after the approval gate passes — full implementation in Milestones 4c and 5.
 - **Bob session association is manual.** No automatic hook — confirmed design, not a bug.
 - **Frontend pages are placeholder shells.** Real UI in Milestone 6.
-- **Git evidence capture unverified.** Requires Milestone 4 and a real PIE repo path.
+- **TF-IDF similarity has no semantic understanding.** Two tickets about "login" and "authentication" may score low if they use different vocabulary. Upgrade to embeddings is planned but deferred (no API key required for M4a).
 
 ## Next Steps
 
-1. **Milestone 4a** — Historical ticket retrieval and semantic similarity (TF-IDF cosine, `historical_evidence_service`, `ResolvedTicket` model, `POST /api/resolved-tickets/import`, `GET /api/resolved-tickets`, mode score enrichment).
-2. **Milestone 4b** — PR evidence discovery and current-code analysis.
-3. **Milestone 4c** — Bob session link (full implementation).
-4. **Milestone 5** — Outcome recording and mode comparison.
-5. **Milestone 6** — React frontend (4-screen wizard, no Developer Match screen).
+1. **Milestone 4b** — PR evidence discovery: GitHub API enrichment, LLM analysis of PR diffs, `was_reverted` detection.
+2. **Milestone 4c** — Bob session link: full `POST /api/bob-sessions`, confirm flow, diff_summary capture.
+3. **Milestone 5a** — Requirement-level outcome recording (`ac_detail`, `ac_met` granularity).
+4. **Milestone 5b** — Comparison and self-learning: resolved ticket promotion from successful outcomes.
+5. **Milestone 6** — React frontend (4-screen wizard).
 6. **Milestone 7** — Smoke test and demo readiness.
-7. **Milestone 8 (future)** — Developer match: Jira/GitHub bootstrap, skill verification, team matching, dev-match approval gate.
+7. **Milestone 8 (future)** — Developer match.
