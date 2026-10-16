@@ -1,9 +1,10 @@
 """
-Pydantic request/response schemas — Milestones 2, 3, and 4a.
+Pydantic request/response schemas — Milestones 2, 3, 4a, and 4b.
 
 Covers: Story import, story listing, developer profile listing,
         recommendation generation, approval/override,
-        resolved ticket import/listing (M4a).
+        resolved ticket import/listing (M4a),
+        PR evidence enrichment (M4b).
 """
 
 from __future__ import annotations
@@ -168,12 +169,59 @@ class SimilarTicketItem(BaseModel):
 
 
 class SupportingPRItem(BaseModel):
-    """A PR URL extracted from a resolved ticket's linked_prs list."""
+    """
+    A PR URL extracted from a resolved ticket's linked_prs list.
+
+    M4b fields (all optional/nullable for backward compatibility):
+    - state: "open" | "closed" as returned by GitHub.
+    - test_files_present: pattern-match heuristic; not a verified test run.
+    - was_reverted: True when PR title signals a revert.
+    - ci_checks: raw check-run results; passing CI does not imply AC were met.
+    - diff_summary: LLM-generated prose summary (null when LLM unavailable).
+    - source_warning: non-null when enrichment was partial or failed.
+    - verified: False when evidence is unverified (token absent, API error, etc.)
+    """
 
     url: str
     merged: bool | None = None
     files_changed: list[Any] = []
     title: str | None = None
+    # M4b enrichment fields — all optional so M4a callers are unaffected
+    state: str | None = None
+    test_files_present: bool | None = None
+    was_reverted: bool | None = None
+    ci_checks: list[Any] = []
+    diff_summary: str | None = None
+    source_warning: str | None = None
+    verified: bool = False
+
+
+class ReadinessCheckResultSchema(BaseModel):
+    """A single readiness check result as returned by the API."""
+
+    name: str
+    status: str              # "pass" | "warn" | "fail"
+    can_auto_resolve: bool
+    details: str
+    missing_items: list[str] = []
+
+
+class TicketReadinessSchema(BaseModel):
+    """
+    Aggregate ticket-readiness assessment embedded in RecommendationResponse.
+
+    All fields default so older clients and existing Recommendation records
+    without readiness data remain backward compatible.
+    """
+
+    overall_status: str = "not_assessed"  # "ready"|"ready_with_gaps"|"not_ready"|"not_assessed"
+    checks: list[ReadinessCheckResultSchema] = []
+    auto_resolvable_gaps: int = 0
+    human_required_gaps: int = 0
+    summary: str = ""
+    # From LLM semantic check (check 7) — None when LLM was unavailable.
+    llm_recommended_mode: str | None = None  # "AI" | "AI + human" | "Human"
+    llm_confidence: str | None = None        # "high" | "medium" | "low"
 
 
 class RecommendationResponse(BaseModel):
@@ -216,7 +264,14 @@ class RecommendationResponse(BaseModel):
     similar_tickets: list[Any] = []
     supporting_prs: list[Any] = []
     evidence_confidence: str = "none"   # "high"|"medium"|"low"|"none"
-    code_analysis_notes: str | None = None  # populated in M4b
+    code_analysis_notes: str | None = None  # populated in M4b when LLM available
+
+    # M4b PR enrichment warnings — list of source_warning strings from PREvidence records.
+    # Empty when all PRs enriched successfully or no PRs were present.
+    pr_evidence_warnings: list[str] = []
+
+    # Ticket-readiness assessment (M4c) — null on older records without readiness data.
+    ticket_readiness: TicketReadinessSchema | None = None
 
     # Shared
     uncertainty_note: str | None
@@ -257,6 +312,41 @@ class ModeOverrideRequest(BaseModel):
         default=None,
         description="Optional new mode to set when overriding ('bob_led'|'collaborative'|'human_led').",
     )
+
+
+# ---------------------------------------------------------------------------
+# PREvidence schemas (M4b)
+# ---------------------------------------------------------------------------
+
+class PREvidence(BaseModel):
+    """
+    A GitHub PR evidence record as stored and returned by the API.
+
+    All fields that depend on GitHub API access are nullable.
+    merged=True does NOT imply AC were met.
+    """
+
+    id: str
+    resolved_ticket_id: str | None = None
+    story_id: str | None = None
+    url: str
+    title: str | None = None
+    state: str | None = None
+    merged: bool | None = None
+    base_branch: str | None = None
+    head_branch: str | None = None
+    files_changed: list[Any] = []
+    test_files_present: bool | None = None
+    was_reverted: bool | None = None
+    ci_checks: list[Any] = []
+    diff_summary: str | None = None
+    code_analysis_notes: str | None = None
+    source: str
+    source_warning: str | None = None
+    verified: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 # ---------------------------------------------------------------------------

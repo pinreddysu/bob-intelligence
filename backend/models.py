@@ -1,9 +1,9 @@
 """
-ORM models — Milestones 2, 3, 4a.
+ORM models — Milestones 2, 3, 4a, 4b.
 
 Entities:
   Story, Recommendation, DeveloperProfile, BobSession, Outcome, Comparison,
-  ResolvedTicket (NEW in M4a)
+  ResolvedTicket (NEW in M4a), PREvidence (NEW in M4b)
 
 Schema note (approval status contradiction resolved):
   The plan specified a single `approval_status` field on Recommendation, but the
@@ -197,6 +197,11 @@ class Recommendation(Base):
     )
     # Populated in M4b; null in M4a
     code_analysis_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # ── Ticket readiness (M4c) ────────────────────────────────────────────────
+    # Serialised ReadinessAssessment: {overall_status, checks[], auto_resolvable_gaps,
+    # human_required_gaps, summary, llm_recommended_mode, llm_confidence}
+    # Null on older records created before M4c.
+    ticket_readiness: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
 
     # ── Shared ────────────────────────────────────────────────────────────────
     uncertainty_note: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -314,6 +319,81 @@ class Comparison(Base):
     # Relationships
     recommendation: Mapped["Recommendation"] = relationship(back_populates="comparisons")
     outcome: Mapped["Outcome"] = relationship(back_populates="comparisons")
+
+
+# ---------------------------------------------------------------------------
+# PREvidence (M4b)
+# ---------------------------------------------------------------------------
+
+class PREvidence(Base):
+    """
+    GitHub PR evidence record fetched during M4b enrichment.
+
+    One record per unique PR URL encountered across similar resolved tickets
+    and the current story's own linked_prs.
+
+    Design constraints:
+    - merged=True does NOT imply AC were met.
+    - all fields from the GitHub API are explicitly nullable; partial evidence
+      is stored with source_warning rather than silently omitted.
+    - diff_summary and code_analysis_notes are populated by llm_service
+      when LLM_API_KEY is configured; otherwise they remain null.
+    """
+
+    __tablename__ = "pr_evidence"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    # FK to the resolved ticket this PR is linked to (nullable — PR may come
+    # from the current story's own linked_prs rather than a resolved ticket).
+    resolved_ticket_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("resolved_tickets.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # FK to the current story when the PR is from story.linked_prs
+    story_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("stories.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    url: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # "open" | "closed" — as returned by GitHub API
+    state: Mapped[str | None] = mapped_column(String, nullable=True)
+    # True = PR was merged; False = closed without merge; None = unknown
+    # Merged PRs are NOT treated as proof that acceptance criteria were met.
+    merged: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    base_branch: Mapped[str | None] = mapped_column(String, nullable=True)
+    head_branch: Mapped[str | None] = mapped_column(String, nullable=True)
+    # List of file paths changed in the PR diff
+    files_changed: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # True when any file in files_changed matches test-file patterns.
+    # None = unknown (e.g. files not fetched or LLM not available).
+    # This is a pattern-match heuristic, not a verified test-run result.
+    test_files_present: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # True when the PR title contains "revert" + a PR number reference.
+    # None = unknown (title not available).
+    was_reverted: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Raw CI/check-run results list: [{name, status, conclusion}]
+    # Empty list = checks not fetched or not available.
+    ci_checks: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # Populated by llm_service when LLM_API_KEY is configured; null otherwise.
+    diff_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Populated by llm_service; null when LLM unavailable.
+    code_analysis_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # "github_api" | "sample"
+    source: Mapped[str] = mapped_column(String, nullable=False, default="github_api")
+    # Warning recorded when enrichment was partial (e.g. token missing, API error).
+    source_warning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # False when evidence is partial/unverified (e.g. token absent, API error).
+    verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_now
+    )
+
+    # Relationships
+    resolved_ticket: Mapped["ResolvedTicket | None"] = relationship(
+        "ResolvedTicket", foreign_keys=[resolved_ticket_id]
+    )
+    story: Mapped["Story | None"] = relationship(
+        "Story", foreign_keys=[story_id]
+    )
 
 
 # ---------------------------------------------------------------------------
