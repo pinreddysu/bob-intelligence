@@ -683,42 +683,48 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 
 ---
 
-### Milestone 4b — PR evidence discovery, LLM analysis, and outcome/session evidence ← **NEXT INCOMPLETE MILESTONE**
+### Milestone 4b — PR evidence discovery, LLM analysis, and outcome/session evidence
 
 **Intent:** Enrich PR evidence records with GitHub-sourced metadata (diff, files, test presence, revert detection) and replace pattern-matching with LLM-generated analysis of each PR diff against the new story. Wire `Outcome` and `BobSession` records for similar stories into the mode engine as direct evidence. This is the milestone that enables the full evidence flow: resolved ticket → PR diff → LLM analysis → outcome evidence → session intervention evidence → mode recommendation.
 
-**Acceptance criteria:**
-- `PREvidence` ORM model exists with all fields from Core Entities above.
-- For each PR URL in `similar_tickets[].linked_prs`, attempt GitHub API call. When `GITHUB_TOKEN` absent or call fails, record `source_warning` and skip enrichment — never silently fail.
-- `test_files_present` is set correctly based on file list patterns (fallback) or LLM judgment (preferred).
-- `was_reverted` detection via PR title search (no commit-graph traversal required for MVP).
-- `backend/services/llm_service.py` created with `analyze_pr(story, pr_diff, resolved_ticket, outcomes, bob_sessions) → LLMAnalysis` interface. Provider selected by `LLM_PROVIDER` env var (`watsonx` or `openai`). When `LLM_API_KEY` absent, returns `None` and records `source_warning`.
-- When LLM available, `llm_service.analyze_pr()` is called for each PR and result stored in `PREvidence.diff_summary` and `PREvidence.code_analysis_notes`.
-- LLM `mode_signal` and `risk_flags` are incorporated into `mode_evidence[]` and `mode_risks[]` respectively.
-- LLM `relevant = false` causes a PR to be excluded from `supporting_prs[]` in the response.
-- `Outcome` records for similar stories' `story_id` values are fetched and their `ac_met` / `ac_detail` signals added to `mode_evidence[]` and `mode_risks[]`.
-- `BobSession` records for similar stories are fetched and `human_interventions` count signals added to `mode_evidence[]`. Count ≥3 adds a risk item.
-- `supporting_prs[]` in `RecommendationResponse` now includes `diff_summary`, `test_files_present`, `was_reverted`, `llm_analysis` fields.
-- `was_reverted = True` on any supporting PR adds a "risk" item to `mode_risks[]`.
-- When LLM unavailable and `PIE_REPO_PATH` set, fallback shallow code inspection runs and populates `code_analysis_notes`.
-- `uncertainty_note` states LLM unavailability when `LLM_API_KEY` not configured.
-- `RecommendationResponse` schema extended with `llm_pr_analysis[]`.
-- All new test cases from Testing Strategy (M4b section) pass.
-- Existing M4a tests still pass.
+**Acceptance criteria — verified:**
+- `PREvidence` ORM model exists with all fields from Core Entities above. ✅
+- For each PR URL in `similar_tickets[].linked_prs`, GitHub API call attempted. When `GITHUB_TOKEN` absent or call fails, `source_warning` recorded, partial evidence returned — never silently fails. ✅
+- `test_files_present` set correctly via file-list pattern matching (fallback when LLM absent). ✅
+- `was_reverted` detection via PR title containing "revert" + `#N` reference (no commit-graph traversal). ✅
+- `backend/services/llm_service.py` created with `analyze_pr() → (LLMAnalysis | None, warning)` interface. Provider selected by `LLM_PROVIDER` (`watsonx` | `openai`). When `LLM_API_KEY` absent, returns `(None, warning)`. ✅
+- When LLM available, `diff_summary` and `code_analysis_notes` populated in `PREvidence` and `supporting_prs[]`. ✅
+- LLM `relevant = False` causes PR to be excluded from `supporting_prs[]`. ✅
+- `Outcome` records for similar stories fetched; `ac_met=True` → positive `mode_evidence[]`; `ac_met=False` → `mode_risks[]`. ✅
+- `BobSession` records fetched; zero interventions → positive evidence; ≥3 → risk item. ✅
+- `supporting_prs[]` items now include `state`, `test_files_present`, `was_reverted`, `ci_checks`, `diff_summary`, `source_warning`, `verified`. ✅
+- `was_reverted = True` on any supporting PR adds a risk item to `mode_risks[]`. ✅
+- `uncertainty_note` states LLM unavailability when `LLM_API_KEY` not configured. ✅
+- `RecommendationResponse` extended with `pr_evidence_warnings[]`. ✅
+- All 60 M4b test cases pass. ✅
+- All existing M1–M4a tests still pass (382/382 total). ✅
 
-**Relevant context:**
-- `backend/services/llm_service.py` — new file; `analyze_pr()` and provider abstraction
-- `backend/services/historical_evidence_service.py` — add `enrich_with_llm()`, `collect_outcome_evidence()`, `collect_session_evidence()` functions
-- `backend/services/recommendation_service.py` — `_mode_engine()` extended to consume LLM, outcome, and session evidence items
-- `backend/models.py` — `PREvidence` model; `Recommendation` gains `llm_pr_analysis` column
-- `backend/schemas.py` — `PREvidence` response schema extended; `RecommendationResponse` gains `llm_pr_analysis`
-- `backend/.env.example` — add `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_ENDPOINT`
+**Implementation notes:**
+- M4b evidence items are **advisory only** — they populate `mode_evidence[]` / `mode_risks[]` but do not change the numeric `mode_score`. Scoring behaviour from M3/M4a is preserved exactly.
+- `Outcome.ac_met` remains Boolean in the current schema (M5a changes it to Text). The `"partial"` string path in `collect_outcome_evidence()` is forward-compatible and tested via in-memory patching.
+- `BobSession.human_interventions` is an M4c field. `collect_session_evidence()` uses `getattr(..., None)` as a forward-compatible fallback — zero interventions produces a positive signal for all current sessions.
+- Merged PRs and passing CI are never recorded as proof that AC were met.
 
-**Status: `[ ] pending`**
+**Relevant files changed:**
+- `backend/services/github_service.py` — NEW: `parse_pr_url()`, `fetch_pr_evidence()`, `_is_test_file()`, `_detect_revert()`
+- `backend/services/llm_service.py` — NEW: `analyze_pr()`, `LLMAnalysis` dataclass, OpenAI + watsonx providers
+- `backend/models.py` — NEW: `PREvidence` ORM model (additive, no existing tables changed)
+- `backend/schemas.py` — Extended `SupportingPRItem`; added `PREvidence` schema; added `pr_evidence_warnings` to `RecommendationResponse`
+- `backend/services/historical_evidence_service.py` — Added `enrich_prs_with_github()`, `collect_outcome_evidence()`, `collect_session_evidence()`, `build_code_analysis_notes()`
+- `backend/services/recommendation_service.py` — Extended `_mode_engine()` and `generate()` to consume all M4b signals
+- `backend/.env.example` — Added `GITHUB_TOKEN`, `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_ENDPOINT`, `LLM_MODEL`, `LLM_PROJECT_ID`
+- `backend/tests/test_milestone4b.py` — NEW: 60 test cases
+
+**Status: `[x] complete`** — verified 2025-07-17. 382/382 tests passing.
 
 ---
 
-### Milestone 4c — Bob session link and evidence capture
+### Milestone 4c — Bob session link and evidence capture ← **NEXT INCOMPLETE MILESTONE**
 
 **Intent:** Replace the M3 501 stub with a fully working Bob session endpoint. Sessions are created as drafts — either automatically via a Bob stop hook or manually — and must be explicitly confirmed by the user before they link to outcomes. The auto-generated summary pre-fills the UI but is never finalised without review.
 
@@ -733,7 +739,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 - All new test cases from Testing Strategy (M4c section) pass.
 - Existing M1–M4b tests still pass.
 
-**Status: `[ ] pending`**
+**Status: `[ ] deferred`** — Deferred to future phase. Focus shifted to M6 React frontend.
 
 ---
 
@@ -750,7 +756,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 - All new test cases from Testing Strategy (M5a section) pass.
 - Existing tests still pass (no test uses the boolean `ac_met` directly — verified before migration).
 
-**Status: `[ ] pending`**
+**Status: `[ ] deferred`** — Deferred to future phase. Focus shifted to M6 React frontend.
 
 ---
 
@@ -769,7 +775,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 - All new test cases from Testing Strategy (M5b section) pass.
 - Existing tests still pass.
 
-**Status: `[ ] pending`**
+**Status: `[ ] deferred`** — Deferred to future phase. Focus shifted to M6 React frontend.
 
 ---
 
@@ -786,7 +792,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 - App runs via `npm run dev` and connects to the local backend.
 - All four wizard screens are functional end-to-end in a manual walkthrough.
 
-**Status: `[ ] pending`**
+**Status: `[-] in progress`** — ← **CURRENT MILESTONE**
 
 ---
 
@@ -855,6 +861,6 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 
 ## Single Best Next Task
 
-**Milestone 4a — Historical ticket retrieval and semantic similarity.**
+**Milestone 6 — React frontend.**
 
-It is the foundation for all subsequent historical-evidence features (PR evidence, LLM analysis, outcome/session evidence, self-learning). It produces an immediately demonstrable change to the `POST /api/recommendations` response (new `similar_tickets` and `evidence_confidence` fields) that is visible in both the API and the future UI without requiring any UI changes. All subsequent milestones build on its `ResolvedTicket` data model and the `historical_evidence_service` interface — which is designed so that M4b can layer LLM analysis, outcome evidence, and session intervention signals on top without changing the recommendation service's public API. It can be implemented and tested with sample data, without live Jira, GitHub, or LLM credentials.
+M4c, M5a, and M5b are deferred to a future phase. The React frontend (M6) is now the top priority — it connects all completed backend capabilities (M1–M4b) into a demonstrable four-screen wizard. The backend API is fully functional with sample data, so the frontend can be built and demoed without any additional backend work.

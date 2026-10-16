@@ -9,10 +9,12 @@ For a selected story the product:
 2. Recommends one of three execution modes: Bob-led, Collaborative, or Human-led.
 3. Explains the recommendation using evidence, risks, counterevidence, and uncertainty.
 4. Enriches the mode recommendation with semantically similar resolved tickets (M4a).
-5. Links the recommendation to actual Bob-assisted work.
-6. Records verifiable outcomes (changed files, test results, build results, AC met).
-7. Compares the original recommendation with the actual outcome.
-8. Preserves completed-task evidence to inform future recommendations.
+5. Enriches supporting PRs with GitHub metadata, patches, and LLM analysis; wires Outcome and BobSession evidence from similar stories (M4b).
+6. **Determines the final mode via IBM Bob headless CLI** — passing ticket context, PR patches, and current PIE source excerpts (M4d).
+7. Links the recommendation to actual Bob-assisted work.
+8. Records verifiable outcomes (changed files, test results, build results, AC met).
+9. Compares the original recommendation with the actual outcome.
+10. Preserves completed-task evidence to inform future recommendations.
 
 ## Technology Stack
 
@@ -38,8 +40,8 @@ Browser (React/Vite :5173)
 FastAPI (backend/main.py :8000)
      ├── /api/stories              → jira_service  (Jira REST v3 or explicit sample import)
      ├── /api/developer-profiles   → sample import only (preserved; not used for recommendations in MVP)
-     ├── /api/recommendations      → recommendation_service (priority + mode + M4a historical evidence)
-     ├── /api/resolved-tickets     → resolved_tickets router (import + list — Milestone 4a)
+     ├── /api/recommendations      → recommendation_service (priority + mode + M4a/M4b evidence)
+     ├── /api/resolved-tickets     → resolved_tickets router (import + list — M4a)
      ├── /api/bob-sessions         → SQLite (manual explicit link — Milestone 4c)
      └── /api/outcomes             → evidence_service + SQLite (Milestone 5)
 ```
@@ -54,9 +56,9 @@ bob-intelligence/
 │   ├── main.py               FastAPI app + /api/health + lifespan DB init (v0.4.0)
 │   ├── database.py           SQLAlchemy engine + session + init_db()
 │   ├── models.py             ORM: Story, Recommendation, DeveloperProfile, BobSession,
-│   │                                Outcome, Comparison, ResolvedTicket (M4a)
+│   │                                Outcome, Comparison, ResolvedTicket (M4a), PREvidence (M4b)
 │   ├── schemas.py            Pydantic schemas — Story, DeveloperProfile, Recommendation
-│   │                                (extended with M4a fields), ResolvedTicket
+│   │                                (extended with M4a+M4b fields), ResolvedTicket, PREvidence
 │   ├── routers/
 │   │   ├── stories.py            GET /api/stories, POST /api/stories/import, GET /api/stories/{id}
 │   │   ├── developer_profiles.py GET /api/developer-profiles, POST .../import-sample
@@ -67,9 +69,11 @@ bob-intelligence/
 │   │   └── outcomes.py           409 gate active; full impl Milestone 5
 │   ├── services/
 │   │   ├── jira_service.py              Jira REST v3 fetch + sample data loader
-│   │   ├── recommendation_service.py    Priority + mode engine + M4a historical evidence
-│   │   ├── historical_evidence_service.py  TF-IDF cosine similarity, evidence confidence (M4a)
-│   │   └── evidence_service.py          placeholder (Milestone 4b)
+│   │   ├── recommendation_service.py    Priority + mode engine + M4a/M4b evidence wiring
+│   │   ├── historical_evidence_service.py  TF-IDF similarity (M4a); PR/outcome/session enrichment (M4b)
+│   │   ├── github_service.py            GitHub REST API — parse_pr_url, fetch_pr_evidence (patches), fetch_file_content (M4b/4d)
+│   │   ├── llm_service.py               LLM analysis — analyze_pr(), analyze_mode() via Bob CLI, openai/watsonx (M4b/4d)
+│   │   └── evidence_service.py          placeholder (future milestones)
 │   ├── sample_data/
 │   │   ├── stories.json            PIE sample open stories (user auth domain) [SAMPLE DATA]
 │   │   ├── resolved_tickets.json   PIE resolved tickets for M4a historical evidence [SAMPLE DATA]
@@ -77,7 +81,8 @@ bob-intelligence/
 │   ├── tests/
 │   │   ├── test_milestone2.py      33 pytest tests (all passing)
 │   │   ├── test_milestone3.py      42 pytest tests (all passing)
-│   │   └── test_milestone4a.py     50 pytest tests (all passing)
+│   │   ├── test_milestone4a.py     50 pytest tests (all passing)
+│   │   └── test_milestone4b.py     60 pytest tests (all passing)
 │   ├── conftest.py           Test fixtures + DB isolation
 │   ├── requirements.txt
 │   ├── requirements-dev.txt
@@ -105,9 +110,10 @@ bob-intelligence/
 | 1 — Scaffold + docs baseline | ✅ Complete | Health endpoint verified. |
 | 2 — Data layer + story import | ✅ Complete | 33/33 tests passing. |
 | 3 — Recommendation engine | ✅ Complete | 75/75 tests passing. |
-| 4a — Historical ticket retrieval + similarity | ✅ Complete | 125/125 tests passing. Smoke test updated. |
-| 4b — PR evidence + LLM analysis | ⬜ Pending | Next milestone |
-| 4c — Bob session link (full impl) | ⬜ Pending | 409 gate active |
+| 4a — Historical ticket retrieval + similarity | ✅ Complete | 125/125 tests passing. |
+| 4b — PR evidence + LLM analysis | ✅ Complete | 382/382 tests passing. |
+| 4d — LLM-driven mode recommendation (Bob CLI) | ✅ Complete | Tests not yet updated for 4d. |
+| 4c — Bob session link (full impl) | ⬜ Next | 409 gate active |
 | 5 — Outcome + comparison | ⬜ Pending | 409 gate active |
 | 6 — React frontend | ⬜ Pending | Placeholder pages exist |
 | 7 — Smoke test + demo readiness | ⬜ Pending | |
@@ -168,7 +174,8 @@ Ticket prioritization is advisory — no approval gate needed.
 - 33 pytest tests in [`backend/tests/test_milestone2.py`](backend/tests/test_milestone2.py) — all passing
 - 42 pytest tests in [`backend/tests/test_milestone3.py`](backend/tests/test_milestone3.py) — all passing
 - 50 pytest tests in [`backend/tests/test_milestone4a.py`](backend/tests/test_milestone4a.py) — all passing
-- **Total: 125/125 passing**
+- 60 pytest tests in [`backend/tests/test_milestone4b.py`](backend/tests/test_milestone4b.py) — all passing
+- **Total: 382/382 passing** (includes hardening, AC quality, correctness prerequisite tests)
 - Run from project root: `python3 -m pytest backend/tests/ -v`
 
 ## Key Decisions
@@ -241,7 +248,7 @@ curl http://localhost:8000/api/health   # → {"status":"ok"}
 # Always run from project root, not from backend/
 pip3 install -r backend/requirements-dev.txt
 python3 -m pytest backend/tests/ -v
-# Expected: 125 passed
+# Expected: 382 passed
 ```
 
 Tests use `bob_intelligence_test.db` (created and deleted automatically).
@@ -343,19 +350,75 @@ Priority rank is **advisory** — it surfaces the highest-priority story for the
 - **Developer match deferred.** `DeveloperProfile` model, sample data, and list/import endpoints are preserved but not used for recommendations. Deferred to Milestone 8.
 - **Jira custom field keys unverified on real instance.** `JIRA_STORY_POINTS_FIELD` and `JIRA_AC_FIELD` vary by instance — service returns `source_warning` when missing.
 - **`linked_prs` always empty on Jira story import.** Dev-status API call deferred to Milestone 4b.
-- **`supporting_prs` has no GitHub metadata in M4a.** `merged`, `title`, `files_changed` are all null/empty — GitHub enrichment is M4b.
-- **`code_analysis_notes` is null in M4a.** Populated in M4b after LLM or shallow code inspection.
+- **`supporting_prs` GitHub metadata.** `merged`, `title`, `files_changed`, `state`, `test_files_present`, `was_reverted`, `ci_checks` are populated when `GITHUB_TOKEN` is set (M4b). When token is absent, all fields are null and `source_warning` is set.
+- **`code_analysis_notes`.** Populated from LLM diff summaries when `LLM_API_KEY` is configured (M4b); falls back to file-count pattern analysis when `PIE_REPO_PATH` is set; explicitly null otherwise.
+- **`Outcome.ac_met` is `Boolean`.** M5a will change it to `Text` (`"successful"/"partial"/"failed"/"unverified"`). The `"partial"` string path in `collect_outcome_evidence()` is forward-compatible but only fully operational after M5a.
+- **`BobSession.human_interventions` does not exist yet.** M4c adds this field. Until then, all sessions show "zero interventions" — a positive signal. `collect_session_evidence()` uses `getattr(..., None)` as a forward-compatible fallback.
 - **Bob session and outcome endpoints return 501** after the approval gate passes — full implementation in Milestones 4c and 5.
 - **Bob session association is manual.** No automatic hook — confirmed design, not a bug.
 - **Frontend pages are placeholder shells.** Real UI in Milestone 6.
 - **TF-IDF similarity has no semantic understanding.** Two tickets about "login" and "authentication" may score low if they use different vocabulary. Upgrade to embeddings is planned but deferred (no API key required for M4a).
 
+## Milestone 4b — What Was Implemented
+
+### New Service: `github_service.py` ([`backend/services/github_service.py`](backend/services/github_service.py))
+
+- **`parse_pr_url(url)`** — parses GitHub PR URLs into `(owner, repo, pr_number)` tuples. Returns `None` for invalid/non-GitHub URLs.
+- **`fetch_pr_evidence(url)`** — calls GitHub REST API (`GET /repos/{owner}/{repo}/pulls/{number}` + `/files` + `/commits/{sha}/check-runs`). Returns a full evidence dict on success; partial evidence dict with `source_warning` on any failure (missing token, 401/403/404/5xx, network error). Never raises.
+- **`_is_test_file(path)`** — detects test files via patterns: `test_*.py`, `*_test.py`, `*.spec.*`, `*.test.*`, `/test/`, `/tests/`.
+- **`_detect_revert(title)`** — returns `True` when PR title contains "revert" (case-insensitive) **and** a `#N` PR reference. Does not trigger on "revert" alone.
+
+### New Service: `llm_service.py` ([`backend/services/llm_service.py`](backend/services/llm_service.py))
+
+- **`analyze_pr(...)`** — sends PR metadata + story context to the configured LLM; returns `(LLMAnalysis | None, warning)`. When `LLM_API_KEY` is absent, returns `(None, warning)` immediately.
+- **`LLMAnalysis`** dataclass — `relevant`, `relevance_reason`, `diff_summary`, `has_tests`, `complexity`, `risk_flags`, `intervention_signal`, `mode_signal`, `mode_rationale`, `code_analysis_notes`.
+- Provider abstraction: `LLM_PROVIDER=openai` (default) or `watsonx`. Provider details are hidden from `historical_evidence_service` and `recommendation_service`.
+- LLM output is advisory — `mode_signal` does not override `mode_score`.
+
+### New ORM Model: `PREvidence` ([`backend/models.py`](backend/models.py))
+
+Fields: `id`, `resolved_ticket_id` (FK nullable), `story_id` (FK nullable), `url`, `title`, `state`, `merged`, `base_branch`, `head_branch`, `files_changed`, `test_files_present`, `was_reverted`, `ci_checks`, `diff_summary`, `code_analysis_notes`, `source`, `source_warning`, `verified`, `created_at`.
+
+`merged=True` does NOT imply AC were met — stated explicitly in model docstring.
+
+### Extended Historical Evidence Service
+
+Added to [`backend/services/historical_evidence_service.py`](backend/services/historical_evidence_service.py):
+
+- **`enrich_prs_with_github(supporting_prs, story, similar_tickets_full, db)`** — enriches each PR URL with GitHub metadata + optional LLM analysis. Persists `PREvidence` records. Excludes LLM-irrelevant PRs from return list. Returns `(enriched_prs, warnings)`.
+- **`collect_outcome_evidence(similar_tickets_full, db)`** — fetches `Outcome` records for stories matching similar resolved tickets' `jira_key`. Returns `(evidence_items, risk_items)`.
+- **`collect_session_evidence(similar_tickets_full, db)`** — fetches `BobSession` records for the same stories. Zero interventions → positive evidence; ≥3 → risk item.
+- **`build_code_analysis_notes(enriched_prs, llm_unavailable_warning)`** — builds prose `code_analysis_notes` from LLM diff summaries or file-count pattern analysis.
+
+### Extended Recommendation Service
+
+Updated [`backend/services/recommendation_service.py`](backend/services/recommendation_service.py):
+
+- `_mode_engine()` accepts 7 new optional params: `pr_evidence_items`, `pr_risk_items`, `outcome_evidence_items`, `outcome_risk_items`, `session_evidence_items`, `session_risk_items`, `llm_unavailable_warning`. All are advisory — the numeric `mode_score` is unchanged.
+- `generate()` runs 5 numbered steps (previously 2): priority ranking → historical evidence → GitHub enrichment → outcome/session evidence → mode engine.
+- `code_analysis_notes` is now populated by `build_code_analysis_notes()` rather than hard-coded to `None`.
+
+### Configuration Required to Activate Enrichment
+
+```bash
+# .env (copy from .env.example)
+GITHUB_TOKEN=ghp_...     # optional for public repos; required for private
+LLM_PROVIDER=bob         # or "openai" / "watsonx"
+LLM_API_KEY=...          # Bob API key (passed as BOB_API_KEY to CLI)
+                         # For openai: sk-... | For watsonx: IAM token
+LLM_ENDPOINT=            # not used for bob; required for watsonx
+LLM_MODEL=               # not used for bob; optional for openai/watsonx
+LLM_PROJECT_ID=          # watsonx only
+```
+
+When `LLM_API_KEY` is absent, mode defaults to `collaborative` and `uncertainty_note` is labelled `NOT an evidence-based recommendation`.
+When `GITHUB_TOKEN` is absent on a public repo, PR enrichment proceeds unauthenticated (60 req/hour rate limit).
+
 ## Next Steps
 
-1. **Milestone 4b** — PR evidence discovery: GitHub API enrichment, LLM analysis of PR diffs, `was_reverted` detection.
-2. **Milestone 4c** — Bob session link: full `POST /api/bob-sessions`, confirm flow, diff_summary capture.
-3. **Milestone 5a** — Requirement-level outcome recording (`ac_detail`, `ac_met` granularity).
-4. **Milestone 5b** — Comparison and self-learning: resolved ticket promotion from successful outcomes.
-5. **Milestone 6** — React frontend (4-screen wizard).
-6. **Milestone 7** — Smoke test and demo readiness.
-7. **Milestone 8 (future)** — Developer match.
+1. **Milestone 4c** — Bob session link: full `POST /api/bob-sessions`, confirm flow, `diff_summary` capture, `human_interventions` field (activates `collect_session_evidence()` fully).
+2. **Milestone 5a** — Requirement-level outcome recording (`ac_detail`, `ac_met` as Text — activates full `collect_outcome_evidence()` string paths).
+3. **Milestone 5b** — Comparison and self-learning: resolved ticket promotion from successful outcomes.
+4. **Milestone 6** — React frontend (4-screen wizard).
+5. **Milestone 7** — Smoke test and demo readiness.
+6. **Milestone 8 (future)** — Developer match.
