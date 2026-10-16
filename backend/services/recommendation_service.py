@@ -1,21 +1,28 @@
 """
-Recommendation service — Milestones 3 and 4a.
+Recommendation service — Milestones 3, 4a, 4b, 4d.
 
-Deterministic, explainable rule engine that evaluates a story and produces:
-  - Ticket prioritization: priority_rank, priority_rationale, priority_evidence
-  - Execution mode: mode, mode_rationale, mode_evidence, mode_risks,
-                    mode_counterevidence, uncertainty_note
-  - Historical evidence (M4a): similar_tickets, supporting_prs,
-                    evidence_confidence, code_analysis_notes
+Produces three outputs per story:
+  - Ticket prioritization : priority_rank, priority_rationale, priority_evidence
+  - Execution mode        : mode, mode_rationale, mode_evidence, mode_risks,
+                            mode_counterevidence, uncertainty_note
+  - Historical evidence   : similar_tickets, supporting_prs,
+                            evidence_confidence, code_analysis_notes
 
-Design constraints (from plan):
+Mode recommendation (4d):
+  The final mode comes from llm_service.analyze_mode(), which receives the
+  ticket context, similar resolved tickets, enriched PR evidence (with patches),
+  and current PIE source excerpts.  _mode_engine() is retained to build the
+  evidence/risk lists and uncertainty_note but its numeric score no longer
+  drives the final decision.
+
+  When LLM_API_KEY is absent or the LLM call fails, mode defaults to
+  "collaborative" with uncertainty_note explicitly labelled as NOT evidence-based.
+
+Design constraints:
   - story_points MUST NOT influence any recommendation output.
+  - Priority ranking is fully independent of mode; scores never reach analyze_mode().
   - All evidence items trace to real story fields or verified historical records.
-    Nothing is invented.
-  - uncertainty_note is always explicit about absent evidence.
-  - When fewer than 3 Outcome records exist, uncertainty_note says so.
-  - When no similar resolved tickets are found, uncertainty_note says so.
-  - Recommendation is advisory; no automatic approval.
+  - uncertainty_note is always explicit about absent evidence and service gaps.
   - mode_approval_status starts as "pending" on every new record.
 """
 
@@ -29,7 +36,8 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 from backend.models import Outcome, Recommendation, Story
-from backend.services import historical_evidence_service
+from backend.services import github_service as _github_service
+from backend.services import historical_evidence_service, llm_service
 
 
 # ---------------------------------------------------------------------------
@@ -355,6 +363,13 @@ def _mode_engine(
     story: Story,
     outcome_count: int,
     similar_tickets: list[dict] | None = None,
+    pr_evidence_items: list[dict] | None = None,
+    pr_risk_items: list[dict] | None = None,
+    outcome_evidence_items: list[dict] | None = None,
+    outcome_risk_items: list[dict] | None = None,
+    session_evidence_items: list[dict] | None = None,
+    session_risk_items: list[dict] | None = None,
+    llm_unavailable_warning: str | None = None,
 ) -> tuple[str, str, list, list, list, str]:
     """
     Return (mode, rationale, evidence, risks, counterevidence, uncertainty_note).
@@ -362,6 +377,16 @@ def _mode_engine(
     structure signals and historical evidence, not org-specific label taxonomy.
 
     similar_tickets: pre-computed list from historical_evidence_service.find_similar().
+
+    M4b additions (all optional, default to empty):
+      pr_evidence_items / pr_risk_items   — from GitHub PR enrichment
+      outcome_evidence_items / risks      — from Outcome records of similar stories
+      session_evidence_items / risks      — from BobSession records of similar stories
+      llm_unavailable_warning             — recorded in uncertainty_note when set
+
+    Scoring constraint: M4b evidence items are advisory.  They are added to the
+    evidence/risk lists for transparency but do NOT change the numeric mode_score.
+    This preserves the M3/M4a scoring behaviour exactly as required by the milestone.
     """
     evidence: list[dict] = []
     risks: list[dict] = []
@@ -467,13 +492,13 @@ def _mode_engine(
     # story.linked_prs contains PR URLs imported from Jira with no merge status,
     # test results, or outcome data.  Awarding a score bonus for an unverified URL
     # would conflate "a PR was mentioned" with "the PR was merged and succeeded."
-    # GitHub enrichment (merge status, files changed) is deferred to M4b.
+    # M4b GitHub enrichment provides richer evidence via pr_evidence_items below.
     if story.linked_prs:
         evidence.append(_evidence(
             "linked_prs",
             f"{len(story.linked_prs)} linked PR URL(s) recorded in Jira. "
-            "Merge status, test results, and outcomes are not yet available "
-            "(GitHub enrichment deferred to M4b). Not used in mode scoring.",
+            "Enriched PR evidence (merge status, files, CI checks) is captured "
+            "in supporting_prs. Not used in mode scoring.",
             verified=False,
         ))
 
@@ -504,6 +529,24 @@ def _mode_engine(
 
     if not similar_tickets:
         uncertainty_parts.append("no similar resolved tickets found")
+
+    # 7. M4b — PR evidence items (advisory; do not change mode_score)
+    if pr_evidence_items:
+        evidence.extend(pr_evidence_items)
+    if pr_risk_items:
+        risks.extend(pr_risk_items)
+
+    # 8. M4b — Outcome records of similar stories (advisory)
+    if outcome_evidence_items:
+        evidence.extend(outcome_evidence_items)
+    if outcome_risk_items:
+        risks.extend(outcome_risk_items)
+
+    # 9. M4b — BobSession records of similar stories (advisory)
+    if session_evidence_items:
+        evidence.extend(session_evidence_items)
+    if session_risk_items:
+        risks.extend(session_risk_items)
 
     # --- Determine mode -----------------------------------------------------
     if mode_score >= 10:
@@ -559,19 +602,28 @@ def _mode_engine(
     # similar tickets) are also present.  Omitting it when uncertainty_parts is
     # non-empty was a bug — the note said "metadata only" while history had already
     # moved the score.
+    #
+    # M4b: when LLM was unavailable, append that fact to uncertainty_note.
+    llm_suffix = (
+        " LLM PR analysis unavailable — LLM_API_KEY not configured."
+        if llm_unavailable_warning else ""
+    )
+
     if not uncertainty_parts:
         if hist_delta_applied != 0:
             uncertainty_note = (
                 "Recommendation is based on story metadata and historical ticket signals. "
                 f"Historical evidence adjusted mode score by {hist_delta_applied:+d}. "
-                "Linked PR merge status and test outcomes are not yet available."
+                "Linked PR evidence is recorded in supporting_prs (advisory only)."
+                + llm_suffix
             )
         else:
             uncertainty_note = (
                 "Recommendation is based on story metadata (description, "
                 "acceptance criteria, blockers). "
                 "Similar resolved tickets were found but did not adjust the mode score. "
-                "Linked PR merge status and test outcomes are not yet available."
+                "Linked PR evidence is recorded in supporting_prs (advisory only)."
+                + llm_suffix
             )
     else:
         # Uncertainty conditions exist; still disclose any historical adjustment.
@@ -584,10 +636,14 @@ def _mode_engine(
             uncertainty_note = (
                 base
                 + f" Historical evidence adjusted mode score by {hist_delta_applied:+d}."
-                + " Linked PR merge status and test outcomes are not yet available."
+                + " Linked PR evidence is recorded in supporting_prs (advisory only)."
+                + llm_suffix
             )
         else:
-            uncertainty_note = base + " Recommendation is based on story metadata only."
+            uncertainty_note = (
+                base + " Recommendation is based on story metadata only."
+                + llm_suffix
+            )
 
     return mode, rationale, evidence, risks, counterevidence, uncertainty_note
 
@@ -603,9 +659,11 @@ def generate(story: Story, db: "Session") -> Recommendation:
     Steps:
       1. Compute priority rank relative to all open stories in DB.
       2. Find semantically similar resolved tickets (M4a).
-      3. Compute execution mode recommendation (with historical signal).
-      4. Supersede any existing pending recommendation for this story.
-      5. Persist and return the Recommendation record.
+      3. Enrich supporting PRs with GitHub metadata (M4b).
+      4. Collect Outcome and BobSession evidence for similar stories (M4b).
+      5. Compute execution mode recommendation (with all signals).
+      6. Supersede any existing pending recommendation for this story.
+      7. Persist and return the Recommendation record.
 
     Terminal-target behaviour:
       A story whose status is Done/Closed/Resolved/etc. is ordinarily excluded
@@ -621,18 +679,11 @@ def generate(story: Story, db: "Session") -> Recommendation:
     mode_approval_status is always "pending" on creation.
     """
     # ── 1. Priority ranking ────────────────────────────────────────────────
-    # Only open (non-terminal) stories compete in priority ranking.
-    # A story with status "Done", "Closed", "Resolved", etc. is complete work
-    # and should never displace an actionable story in the ranked list.
-    # The target story is always included even if its own status is terminal,
-    # so a recommendation can still be generated; the rank will simply reflect
-    # that it competes only against other open stories.
     all_stories: list[Story] = db.query(Story).all()
     open_stories: list[Story] = [
         s for s in all_stories
         if (s.status or "").lower().strip() not in _STATUS_TERMINAL
     ]
-    # Ensure the target story is always in the ranking pool
     if story not in open_stories:
         open_stories = open_stories + [story]
     priority_rankings = compute_priority_rankings(open_stories)
@@ -642,11 +693,10 @@ def generate(story: Story, db: "Session") -> Recommendation:
 
     # ── 2. Historical evidence (M4a) ───────────────────────────────────────
     similar_tickets = historical_evidence_service.find_similar(story, db)
-    supporting_prs = historical_evidence_service.build_supporting_prs(similar_tickets)
+    supporting_prs_base = historical_evidence_service.build_supporting_prs(similar_tickets)
     evidence_confidence = historical_evidence_service.compute_evidence_confidence(similar_tickets)
 
-    # Strip linked_prs / was_reverted from the stored similar_tickets payload
-    # (they are internal-use fields; the schema only requires the listed keys).
+    # Strip linked_prs / was_reverted from the stored similar_tickets payload.
     stored_similar = [
         {
             "jira_key": t["jira_key"],
@@ -659,13 +709,145 @@ def generate(story: Story, db: "Session") -> Recommendation:
         for t in similar_tickets
     ]
 
-    # ── 3. Mode recommendation ─────────────────────────────────────────────
-    outcome_count: int = db.query(Outcome).count()
-    mode, mode_rationale, mode_evidence, mode_risks, mode_counterevidence, uncertainty_note = (
-        _mode_engine(story, outcome_count, similar_tickets=similar_tickets)
+    # ── 3. GitHub PR enrichment (M4b) ──────────────────────────────────────
+    # enrich_prs_with_github calls github_service + optional llm_service for
+    # each PR URL. Returns enriched dicts (verified fields) and warnings.
+    # Never raises — partial evidence is recorded with source_warning.
+    enriched_prs, _pr_warnings = historical_evidence_service.enrich_prs_with_github(
+        supporting_prs_base, story, similar_tickets, db
+    )
+    # Use enriched list as supporting_prs; fall back to base if enrichment empty
+    supporting_prs = enriched_prs if enriched_prs else supporting_prs_base
+
+    # Build PR-level advisory evidence/risk items from enriched data
+    pr_evidence_items: list[dict] = []
+    pr_risk_items: list[dict] = []
+    for pr in enriched_prs:
+        if pr.get("was_reverted") is True:
+            pr_risk_items.append({
+                "description": (
+                    f"PR {pr['url']} has a revert signal in its title — "
+                    "indicates this type of change may need careful review."
+                ),
+                "severity": "medium",
+            })
+        if pr.get("test_files_present") is True:
+            pr_evidence_items.append({
+                "source": "github_pr",
+                "description": (
+                    f"PR {pr['url']} includes test files — "
+                    "indicates similar work included automated test coverage. "
+                    "Note: presence of test files does not confirm AC were met."
+                ),
+                "verified": pr.get("verified", False),
+            })
+
+    # ── 5. Outcome and BobSession evidence (M4b) ───────────────────────────
+    outcome_ev, outcome_risks = historical_evidence_service.collect_outcome_evidence(
+        similar_tickets, db
+    )
+    session_ev, session_risks = historical_evidence_service.collect_session_evidence(
+        similar_tickets, db
     )
 
-    # ── 4. Supersede any existing pending recommendation for this story ─────
+    # ── 6. Select and fetch current PIE source files for LLM context (4d) ──
+    # select_files_for_llm ranks candidate files by relevance; fetch_file_content
+    # retrieves up to _FILE_CONTENT_CHAR_BUDGET chars.  Failures are captured as
+    # warnings in each file dict — never raises.
+    candidate_files = historical_evidence_service.select_files_for_llm(
+        story, similar_tickets, enriched_prs
+    )
+    current_files: list[dict] = []
+    char_budget = historical_evidence_service._FILE_CONTENT_CHAR_BUDGET
+    chars_used = 0
+    for cf in candidate_files:
+        if chars_used >= char_budget:
+            break
+        owner = cf.get("owner")
+        repo = cf.get("repo")
+        filename = cf.get("filename", "")
+        # Prefer the PR's base_branch; label it accurately so the LLM knows
+        # which revision was fetched.  Never substitute a default silently.
+        ref = cf.get("base_branch") or "HEAD"
+        ref_label = cf.get("base_branch") or "HEAD (fallback — base_branch unavailable)"
+        if not owner or not repo or not filename:
+            current_files.append({
+                "filename": filename,
+                "ref": ref_label,
+                "content": "",
+                "warning": "owner/repo/filename unavailable — cannot fetch source.",
+            })
+            continue
+        content, fetch_warning = _github_service.fetch_file_content(owner, repo, filename, ref)
+        chars_used += len(content)
+        current_files.append({
+            "filename": filename,
+            "ref": ref_label,
+            "content": content,
+            "warning": fetch_warning,
+        })
+
+    # ── 7. LLM availability — for uncertainty_note and evidence lists ───────
+    import os as _os
+    from dotenv import load_dotenv
+    load_dotenv()
+    llm_unavailable_warning: str | None = (
+        "LLM_API_KEY not configured"
+        if not _os.getenv("LLM_API_KEY", "").strip()
+        else None
+    )
+
+    # ── 8. Evidence/risk lists from _mode_engine (advisory, not final mode) ─
+    # _mode_engine still builds mode_evidence, mode_risks, mode_counterevidence,
+    # and uncertainty_note from deterministic story signals and historical data.
+    # Its numeric mode_score is discarded — the LLM owns the final mode.
+    outcome_count: int = db.query(Outcome).count()
+    _, _, mode_evidence, mode_risks, mode_counterevidence, uncertainty_note = (
+        _mode_engine(
+            story,
+            outcome_count,
+            similar_tickets=similar_tickets,
+            pr_evidence_items=pr_evidence_items,
+            pr_risk_items=pr_risk_items,
+            outcome_evidence_items=outcome_ev,
+            outcome_risk_items=outcome_risks,
+            session_evidence_items=session_ev,
+            session_risk_items=session_risks,
+            llm_unavailable_warning=llm_unavailable_warning,
+        )
+    )
+
+    # ── 9. LLM mode recommendation (4d) ────────────────────────────────────
+    # analyze_mode() receives ticket context, historical evidence, PR patches,
+    # and current source excerpts.  Priority scores are NOT passed.
+    # Returns ModeAnalysis; never raises.
+    mode_result = llm_service.analyze_mode(
+        story_title=story.title,
+        story_description=story.description,
+        story_ac=story.acceptance_criteria,
+        story_blockers=list(story.blockers or []),
+        similar_tickets=similar_tickets,
+        enriched_prs=enriched_prs,
+        current_files=current_files,
+    )
+    mode: str = mode_result.mode
+    mode_rationale: str = mode_result.rationale
+
+    # Merge LLM warning into uncertainty_note when the result is not LLM-based
+    if not mode_result.llm_used and mode_result.warning:
+        uncertainty_note = mode_result.warning + (
+            (" " + uncertainty_note) if uncertainty_note else ""
+        )
+    elif mode_result.warning:
+        # LLM-based but flagged uncertainty — append to note
+        uncertainty_note = (uncertainty_note or "") + " " + mode_result.warning
+
+    # Build code_analysis_notes from enriched PR evidence (M4b)
+    code_analysis_notes = historical_evidence_service.build_code_analysis_notes(
+        enriched_prs, llm_unavailable_warning
+    )
+
+    # ── 10. Supersede any existing pending recommendation ──────────────────
     existing = (
         db.query(Recommendation)
         .filter(
@@ -679,7 +861,7 @@ def generate(story: Story, db: "Session") -> Recommendation:
     if existing:
         db.flush()
 
-    # ── 5. Persist new recommendation ──────────────────────────────────────
+    # ── 11. Persist new recommendation ─────────────────────────────────────
     rec = Recommendation(
         story_id=story.id,
         priority_rank=priority_rank,
@@ -692,11 +874,12 @@ def generate(story: Story, db: "Session") -> Recommendation:
         mode_counterevidence=mode_counterevidence,
         uncertainty_note=uncertainty_note,
         mode_approval_status="pending",
-        # Historical evidence (M4a)
+        # Historical + PR evidence (M4a + M4b)
         similar_tickets=stored_similar,
         supporting_prs=supporting_prs,
         evidence_confidence=evidence_confidence,
-        code_analysis_notes=None,  # populated in M4b
+        code_analysis_notes=code_analysis_notes,
+        ticket_readiness=None,
         # Developer match fields stay null — DEFERRED
         suggested_developer=None,
         dev_match_rationale=None,
