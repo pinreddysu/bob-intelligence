@@ -1,20 +1,32 @@
-/**
- * Step 4 of 4 — Outcome & Comparison
- *
- * Allows the user to record test/build results and AC met flag, then
- * displays the comparison between the original recommendation and the
- * actual outcome, with verdict and explanation.
- *
- * Implementation: placeholder UI — wired to backend in Milestone 5.
- */
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
+import { AppShell } from '../components/AppShell'
+import { Card } from '../components/ui'
 
+/**
+ * Outcomes & Comparison — Milestone 5 (not yet implemented).
+ * The backend endpoint POST /api/outcomes is gated with a 409.
+ */
 export default function OutcomeComparison() {
+  const navigate = useNavigate()
   return (
-    <main style={{ maxWidth: 640, margin: '48px auto', fontFamily: 'system-ui, sans-serif' }}>
-      <h2>Step 4 of 4 — Outcome &amp; Comparison</h2>
-      <p style={{ background: '#fff8c5', border: '1px solid #d4a800', padding: '8px 12px', borderRadius: 4 }}>
-        <strong>Milestone 5 required</strong> — outcome recording and comparison not yet implemented.
-      </p>
-    </main>
+    <AppShell title="Outcomes & Comparison" subtitle="Milestone 5 — not yet implemented">
+      <button
+        onClick={() => navigate('/')}
+        style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px', cursor: 'pointer', background: 'none', border: 'none', padding: 0 }}
+      >
+        <ArrowLeft size={14} />
+        Back to Story Queue
+      </button>
+      <Card>
+        <p style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Outcome Recording &amp; Comparison — Planned</p>
+        <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', lineHeight: 1.7 }}>
+          This feature (Milestone 5) is not yet implemented in the backend. The
+          <code style={{ fontFamily: 'ui-monospace, monospace', margin: '0 4px', fontSize: '12px' }}>POST /api/outcomes</code>
+          endpoint is gated behind a 409 response until the story&rsquo;s recommendation is approved.
+          Full implementation is deferred to a future milestone.
+        </p>
+      </Card>
+    </AppShell>
   )
 }

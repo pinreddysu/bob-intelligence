@@ -1,19 +1,33 @@
-/**
- * Step 3 of 4 — Link Bob Work
- *
- * Allows the user to manually attach a Bob session summary, list of files
- * changed, and an optional PIE commit SHA to the story.
- *
- * Implementation: placeholder UI — wired to backend in Milestone 4.
- */
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
+import { AppShell } from '../components/AppShell'
+import { Card } from '../components/ui'
 
+/**
+ * Bob Sessions — Milestone 4c (not yet implemented).
+ * This page is a placeholder. The backend endpoint POST /api/bob-sessions
+ * returns 409 until a recommendation is approved.
+ */
 export default function LinkBobWork() {
+  const navigate = useNavigate()
   return (
-    <main style={{ maxWidth: 640, margin: '48px auto', fontFamily: 'system-ui, sans-serif' }}>
-      <h2>Step 3 of 4 — Link Bob Work</h2>
-      <p style={{ background: '#fff8c5', border: '1px solid #d4a800', padding: '8px 12px', borderRadius: 4 }}>
-        <strong>Milestone 4 required</strong> — Bob session linking not yet implemented.
-      </p>
-    </main>
+    <AppShell title="Bob Sessions" subtitle="Milestone 4c — not yet implemented">
+      <button
+        onClick={() => navigate('/')}
+        style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px', cursor: 'pointer', background: 'none', border: 'none', padding: 0 }}
+      >
+        <ArrowLeft size={14} />
+        Back to Story Queue
+      </button>
+      <Card>
+        <p style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Bob Session Linking — Planned</p>
+        <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', lineHeight: 1.7 }}>
+          This feature (Milestone 4c) is not yet implemented in the backend. The
+          <code style={{ fontFamily: 'ui-monospace, monospace', margin: '0 4px', fontSize: '12px' }}>POST /api/bob-sessions</code>
+          endpoint is gated behind a 409 response until the story&rsquo;s recommendation is approved.
+          Full implementation is deferred to a future milestone.
+        </p>
+      </Card>
+    </AppShell>
   )
 }
