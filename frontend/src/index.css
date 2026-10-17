@@ -1,0 +1,85 @@
+/* Bob Intelligence — Mission Control global styles */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --color-bg: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-sidebar: #111827;
+  --color-sidebar-hover: #1F2937;
+  --color-sidebar-active: #1D4ED8;
+  --color-sidebar-text: #D1D5DB;
+  --color-sidebar-text-muted: #6B7280;
+  --color-border: #E5E7EB;
+  --color-border-subtle: #F1F5F9;
+  --color-text: #1F2328;
+  --color-text-muted: #57606A;
+  --color-text-faint: #8B949E;
+  --color-accent: #2563EB;
+  --color-accent-bg: #EFF6FF;
+  --color-amber: #D97706;
+  --color-amber-bg: #FFFBEB;
+  --color-amber-border: #FCD34D;
+  --color-red: #DC2626;
+  --color-red-bg: #FEF2F2;
+  --color-red-border: #FCA5A5;
+  --color-green: #16A34A;
+  --color-green-bg: #F0FDF4;
+  --color-green-border: #86EFAC;
+
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05);
+  --shadow: 0 1px 3px 0 rgba(0,0,0,0.08), 0 1px 2px -1px rgba(0,0,0,0.06);
+
+  --sidebar-width: 224px;
+  --header-height: 60px;
+
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+a:hover { text-decoration: underline; }
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
