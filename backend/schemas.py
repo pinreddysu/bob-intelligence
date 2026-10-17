@@ -213,16 +213,32 @@ class TicketReadinessSchema(BaseModel):
     All fields default so older clients and existing Recommendation records
     without readiness data remain backward compatible.
     """
-
+    # Overall verdict — drives UI color-coding
     overall_status: str = "not_assessed"  # "ready"|"ready_with_gaps"|"not_ready"|"not_assessed"
-    checks: list[ReadinessCheckResultSchema] = []
-    auto_resolvable_gaps: int = 0
-    human_required_gaps: int = 0
-    summary: str = ""
-    # From LLM semantic check (check 7) — None when LLM was unavailable.
-    llm_recommended_mode: str | None = None  # "AI" | "AI + human" | "Human"
-    llm_confidence: str | None = None        # "high" | "medium" | "low"
+    summary: str = ""                     # sufficiency_reason prose — main thing tech lead reads
 
+    # LLM verdict and confidence
+    sufficiency_verdict: str | None = None   # "sufficient"|"partial"|"insufficient"
+    llm_recommended_mode: str | None = None  # "AI"|"AI + human"|"Human"
+    llm_confidence: str | None = None        # "high"|"medium"|"low"
+
+    # What is blocking resolution
+    blocking_gaps: list[Any] = []            # shown as bulleted list when non-empty
+
+    # Historical evidence quality
+    evidence_relevance: str | None = None          # "strongly_relevant"|"partially_relevant"|...
+    evidence_relevance_reason: str | None = None   # one sentence
+
+    # What context is missing and how to get it
+    needed_context: list[Any] = []         # specific files or info needed
+    retrievability_notes: list[Any] = []   # per-gap {item, auto, reason}
+
+    # Gap counts (derived from retrievability_notes)
+    auto_resolvable_gaps: int = 0   # gaps a re-run can fix
+    human_required_gaps: int = 0    # gaps needing human input
+
+    # Keep for backward compat — always empty without the .txt service
+    checks: list[Any] = []
 
 class RecommendationResponse(BaseModel):
     """A full recommendation record as returned by the API."""

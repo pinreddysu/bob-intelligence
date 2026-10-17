@@ -817,6 +817,14 @@ def generate(story: Story, db: "Session") -> Recommendation:
         )
     )
 
+    readiness_llm, _ = llm_service.analyze_ticket_readiness(
+        story_title=story.title,
+        story_description=story.description,
+        story_ac=story.acceptance_criteria,
+        similar_tickets=similar_tickets,
+        enriched_prs=enriched_prs
+    )
+
     # ── 9. LLM mode recommendation (4d) ────────────────────────────────────
     # analyze_mode() receives ticket context, historical evidence, PR patches,
     # and current source excerpts.  Priority scores are NOT passed.
@@ -879,7 +887,41 @@ def generate(story: Story, db: "Session") -> Recommendation:
         supporting_prs=supporting_prs,
         evidence_confidence=evidence_confidence,
         code_analysis_notes=code_analysis_notes,
-        ticket_readiness=None,
+        ticket_readiness=({
+            # Overall verdict from LLM
+            "overall_status": (
+                "not_ready" if readiness_llm.context_blocks_resolution is True
+                else "ready_with_gaps" if readiness_llm.blocking_gaps or readiness_llm.needed_context
+                else "ready"
+            ),
+            "checks": [],
+            "auto_resolvable_gaps": sum(
+                1 for n in (readiness_llm.retrievability_notes or []) if n.get("auto") is True
+            ),
+            "human_required_gaps": sum(
+                1 for n in (readiness_llm.retrievability_notes or []) if n.get("auto") is False
+            ),
+
+            # Prose summary — the main thing the tech lead reads
+            "summary": readiness_llm.sufficiency_reason or "",
+
+            # LLM mode suggestion and confidence
+            "llm_recommended_mode": readiness_llm.recommended_mode,   # "AI" | "AI + human" | "Human"
+            "llm_confidence": readiness_llm.confidence,                # "high" | "medium" | "low"
+
+            # Blocking gaps — shown as a bulleted list when non-empty
+            "blocking_gaps": readiness_llm.blocking_gaps or [],
+
+            # Evidence relevance — drives the historical panel badge
+            "evidence_relevance": readiness_llm.evidence_relevance,
+            "evidence_relevance_reason": readiness_llm.evidence_relevance_reason or "",
+
+            # Additional context needed — with auto/human tags per item
+            "needed_context": readiness_llm.needed_context or [],
+            "retrievability_notes": readiness_llm.retrievability_notes or [],
+        }
+            if readiness_llm is not None else None    
+        ),
         # Developer match fields stay null — DEFERRED
         suggested_developer=None,
         dev_match_rationale=None,
