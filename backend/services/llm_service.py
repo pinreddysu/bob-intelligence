@@ -43,6 +43,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -297,37 +298,40 @@ def _call_bob(prompt: str, api_key: str, endpoint: str | None) -> tuple[str, str
     """
     Call IBM Bob headless CLI for inference.
 
-    Invokes: bob run --mode ask --format json --max-turns 3 <prompt>
-    The prompt is passed as the positional argument; no stdin input is used.
+    Invokes: bob -p <prompt> --format json --max-turns 10
+    Runs from a temporary empty directory so Bob has no workspace files to
+    explore — all context is embedded in the prompt itself.
 
     Required env vars:
       LLM_API_KEY  — Bob API key; passed as BOB_API_KEY to the subprocess.
 
-    Response envelope expected from Bob:
-      {"status": "success", "last_message": "<JSON string>"}
+    Bob CLI emits NDJSON (one JSON object per line).  We find the line with
+    "type":"result" and extract the assistant reply from it.
 
-    Returns (last_message_string, error_or_None).
-    The caller (_extract_json) handles parsing last_message as JSON.
+    Returns (reply_string, error_or_None).
+    The caller (_extract_json) handles parsing the reply as JSON.
     endpoint is accepted for interface compatibility but not used.
     """
     del endpoint  # not used; Bob CLI is invoked directly without an HTTP endpoint
     env = {**os.environ, "BOB_API_KEY": api_key}
 
-    try:
-        result = subprocess.run(
-            ["bob", "run", "--mode", "ask", "--format", "json", "--max-turns", "3", prompt],
-            capture_output=True,
-            text=True,
-            timeout=180,
-            check=False,
-            env=env,
-        )
-    except FileNotFoundError:
-        return "", "Bob CLI not found — ensure 'bob' is installed and on PATH."
-    except subprocess.TimeoutExpired:
-        return "", "Bob CLI timed out after 180 seconds."
-    except OSError as exc:
-        return "", f"Failed to launch Bob CLI: {exc}"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        try:
+            result = subprocess.run(
+                ["bob", "-p", prompt, "--format", "json", "--max-turns", "10"],
+                capture_output=True,
+                text=True,
+                timeout=180,
+                check=False,
+                env=env,
+                cwd=tmpdir,
+            )
+        except FileNotFoundError:
+            return "", "Bob CLI not found — ensure 'bob' is installed and on PATH."
+        except subprocess.TimeoutExpired:
+            return "", "Bob CLI timed out after 180 seconds."
+        except OSError as exc:
+            return "", f"Failed to launch Bob CLI: {exc}"
 
     if result.returncode != 0:
         stderr_snippet = result.stderr[:300] if result.stderr else "(no stderr)"
@@ -343,25 +347,45 @@ def _call_bob(prompt: str, api_key: str, endpoint: str | None) -> tuple[str, str
             f"Bob CLI returned empty stdout. STDERR: {stderr_snippet!r}"
         )
 
-    try:
-        envelope = json.loads(stdout)
-    except json.JSONDecodeError:
+    # Bob CLI emits NDJSON — find the line with "type":"result"
+    envelope: dict | None = None
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and obj.get("type") == "result":
+            envelope = obj
+            break
+
+    if envelope is None:
         return "", (
-            f"Bob CLI did not return valid JSON envelope. "
+            f"Bob CLI did not return a result line. "
             f"STDOUT (truncated): {stdout[:300]!r}"
         )
-
-    if not isinstance(envelope, dict):
-        return "", f"Bob CLI envelope is not a JSON object: {type(envelope).__name__}."
 
     if envelope.get("status") != "success":
         return "", f"Bob CLI returned non-success status: {envelope.get('status')!r}."
 
-    last_message = envelope.get("last_message")
+    # The assistant reply is nested inside stats — try known field names
+    stats = envelope.get("stats") or {}
+    last_message = (
+        stats.get("last_message")
+        or stats.get("result")
+        or stats.get("session_result")
+        or envelope.get("last_message")
+        or envelope.get("result")
+    )
     if not last_message:
-        return "", f"Bob CLI envelope has no 'last_message' field: {list(envelope.keys())}."
+        return "", (
+            f"Bob CLI result has no reply field. "
+            f"Available keys — envelope: {list(envelope.keys())}, "
+            f"stats: {list(stats.keys())}."
+        )
 
-    # last_message is itself a JSON string containing the structured output
     return last_message, None
 
 
@@ -521,11 +545,13 @@ def _build_readiness_prompt(
         pr_lines.append(
             f"  - {pr.get('url','?')}: merged={pr.get('merged')}, "
             f"test_files={test_str}, files_changed=[{files_preview}], "
-            f"diff_summary={pr.get('diff_summary') or '(unavailable)'!r}"
+            f"diff_summary={(pr.get('diff_summary') or '(unavailable)')!r}"
         )
     prs_str = "\n".join(pr_lines) or "  (none)"
 
-    return f"""You are an engineering evidence analyst assessing whether a Jira ticket is ready for autonomous AI resolution.
+    return f"""IMPORTANT: You are a pure reasoning engine. Do not use any file tools, read any files, or explore any repository. All context you need is provided below — answer from it directly.
+
+You are an engineering evidence analyst assessing whether a Jira ticket is ready for autonomous AI resolution.
 
 NEW TICKET:
   Title: {story_title}
@@ -771,7 +797,9 @@ def _build_mode_prompt(
 
     blockers_str = ", ".join(str(b) for b in story_blockers) if story_blockers else "none"
 
-    return f"""You are an engineering evidence analyst recommending an execution mode for a software ticket.
+    return f"""IMPORTANT: You are a pure reasoning engine. Do not use any file tools, read any files, or explore any repository. All context you need is provided below — answer from it directly.
+
+You are an engineering evidence analyst recommending an execution mode for a software ticket.
 Return ONLY valid JSON — no explanation outside the JSON block.
 
 CURRENT TICKET:

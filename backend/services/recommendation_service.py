@@ -817,7 +817,7 @@ def generate(story: Story, db: "Session") -> Recommendation:
         )
     )
 
-    readiness_llm, _ = llm_service.analyze_ticket_readiness(
+    readiness_llm, readiness_warning = llm_service.analyze_ticket_readiness(
         story_title=story.title,
         story_description=story.description,
         story_ac=story.acceptance_criteria,
