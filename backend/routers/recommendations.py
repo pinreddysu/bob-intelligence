@@ -68,6 +68,33 @@ def create_recommendation(
 
 
 # ---------------------------------------------------------------------------
+# GET /api/recommendations/by-story/{story_id}
+# ---------------------------------------------------------------------------
+
+@router.get("/by-story/{story_id}", response_model=RecommendationResponse)
+def get_recommendation_for_story(
+    story_id: str,
+    db: Session = Depends(get_db),
+) -> RecommendationResponse:
+    """Return the latest non-superseded recommendation for a story, or 404."""
+    rec = (
+        db.query(Recommendation)
+        .filter(
+            Recommendation.story_id == story_id,
+            Recommendation.status != "superseded",
+        )
+        .order_by(Recommendation.created_at.desc())
+        .first()
+    )
+    if not rec:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No recommendation found for story '{story_id}'.",
+        )
+    return RecommendationResponse.model_validate(rec)
+
+
+# ---------------------------------------------------------------------------
 # GET /api/recommendations/{rec_id}
 # ---------------------------------------------------------------------------
 
