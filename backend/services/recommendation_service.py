@@ -799,7 +799,7 @@ def generate(story: Story, db: "Session") -> Recommendation:
     # mode_evidence, mode_risks, mode_counterevidence, and uncertainty_note.
     # The deterministic mode is used as the fallback when the LLM is unavailable.
     outcome_count: int = db.query(Outcome).count()
-    _, _, mode_evidence, mode_risks, mode_counterevidence, uncertainty_note = (
+    rule_mode, _, mode_evidence, mode_risks, mode_counterevidence, uncertainty_note = (
         _mode_engine(
             story,
             outcome_count,
@@ -836,8 +836,14 @@ def generate(story: Story, db: "Session") -> Recommendation:
         current_files=current_files,
         readiness_analysis=readiness_llm,
     )
-    mode: str = mode_result.mode
-    mode_rationale: str = mode_result.rationale
+    # Use the LLM mode only when the LLM was actually invoked; fall back to the
+    # deterministic rule engine when llm_used=False (e.g. no API key, stubbed in tests).
+    if mode_result.llm_used:
+        mode: str = mode_result.mode
+        mode_rationale: str = mode_result.rationale
+    else:
+        mode = rule_mode
+        mode_rationale = mode_result.rationale
 
     # Merge LLM warning into uncertainty_note when the result is not LLM-based
     if not mode_result.llm_used and mode_result.warning:

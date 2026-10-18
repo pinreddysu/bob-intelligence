@@ -64,8 +64,7 @@ import httpx
 # ---------------------------------------------------------------------------
 
 _PR_URL_RE = re.compile(
-    # r"https://github\.com/(?P<owner>[\w.\-]+)/(?P<repo>[\w.\-]+)/pull/(?P<number>\d+)/?$"
-    r"https://github\.com/(?P<owner>[\w.\-]+)/(?P<repo>[\w.\-]+)/pull/(?P<number>\d+)$"
+    r"https://github\.com/(?P<owner>[\w.\-]+)/(?P<repo>[\w.\-]+)/pull/(?P<number>\d+)/?$"
 )
 
 # Revert detection: title contains "revert" AND a PR-number reference like #42
@@ -110,13 +109,12 @@ def _detect_revert(title: str | None) -> bool | None:
     """
     Heuristic revert signal from PR title.
     True  — title contains "revert" + a #N reference.
-    False — title present but does not match (including empty string or None).
+    False — title is absent, empty, or does not match.
     None  — reserved for callers that explicitly signal unknown; not returned here.
     Treat True as a risk signal only, not definitive evidence.
     """
     if not title:
-        # return False
-        return None
+        return False
     return bool(_REVERT_RE.search(title) and _PR_REF_RE.search(title))
 
 
@@ -193,13 +191,7 @@ def fetch_pr_evidence(url: str) -> dict[str, Any]:
         )
 
     owner, repo, number = parsed
-    # token = os.getenv("GITHUB_TOKEN", "").strip()
-    # # Proceed unauthenticated for public repos; note the lower rate limit.
-    # no_token_warning: str | None = (
-    #     "GITHUB_TOKEN not set — using unauthenticated GitHub API (60 req/hr limit). "
-    #     "Set GITHUB_TOKEN in .env for private repos and higher rate limits."
-    #     if not token else None
-    # )
+    token = os.getenv("GITHUB_TOKEN", "").strip()
     # _gh_headers() includes the token when present; omits it when absent.
     headers = _gh_headers()
 
@@ -215,10 +207,21 @@ def fetch_pr_evidence(url: str) -> dict[str, Any]:
         return _partial_evidence(url, "GitHub API returned 401 — GITHUB_TOKEN is invalid or expired.")
     if pr_resp.status_code == 403:
         if pr_resp.headers.get("x-ratelimit-remaining") == "0":
-            return _partial_evidence(url, f"GitHub rate limit exhausted for {owner}/{repo}.")
+            return _partial_evidence(
+                url,
+                f"GitHub rate limit exhausted for {owner}/{repo}. "
+                "Set GITHUB_TOKEN in .env to raise the limit to 5000 req/hr."
+            )
         return _partial_evidence(url, f"GitHub API returned 403 — {owner}/{repo} is not accessible.")
     if pr_resp.status_code == 404:
-        return _partial_evidence(url, f"GitHub PR not found: {owner}/{repo}/pull/{number} (404).")
+        no_token_hint = (
+            " Repository may be private — set GITHUB_TOKEN in .env to access private repos."
+            if not token else ""
+        )
+        return _partial_evidence(
+            url,
+            f"GitHub PR not found: {owner}/{repo}/pull/{number} (404).{no_token_hint}"
+        )
     if not pr_resp.is_success:
         return _partial_evidence(
             url, f"GitHub API returned HTTP {pr_resp.status_code} for {owner}/{repo}/pull/{number}."
@@ -348,12 +351,11 @@ def fetch_pr_evidence(url: str) -> dict[str, Any]:
     # Pass title or None so _detect_revert returns None (unknown) for empty titles
     was_reverted = _detect_revert(title or None)
 
-    # all_warnings = [w for w in [no_token_warning, files_warning, ci_warning] if w]
     all_warnings = [w for w in [files_warning, ci_warning] if w]
     source_warning = "; ".join(all_warnings) if all_warnings else None
-    # verified=True only when the file list was successfully fetched AND a token
-    # was present.  Without a token the evidence is unauthenticated and unverified.
-    # verified = files_warning is None and no_token_warning is None
+    # verified=True when the file list was fetched successfully.
+    # Public repos are accessible without a token; no penalty for missing token
+    # when the API call succeeded.  Token absence is only surfaced on 404/403/rate-limit.
     verified = files_warning is None
 
     return {
