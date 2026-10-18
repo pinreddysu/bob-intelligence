@@ -26,12 +26,14 @@ from backend.routers.resolved_tickets import _load_sample, _upsert_tickets
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Create database tables on startup, then seed sample resolved tickets if the table is empty."""
+    import os
     init_db()
-    db = SessionLocal()
-    try:
-        _upsert_tickets(_load_sample(), db)
-    finally:
-        db.close()
+    if os.getenv("BOB_SKIP_SAMPLE_SEED", "").lower() not in ("1", "true", "yes"):
+        db = SessionLocal()
+        try:
+            _upsert_tickets(_load_sample(), db)
+        finally:
+            db.close()
     yield
 
 
