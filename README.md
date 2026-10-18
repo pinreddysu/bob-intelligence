@@ -1,5 +1,7 @@
 # Bob Intelligence
 
+> **Active development branch:** [`dev-sp`](https://github.com/your-org/bob-intelligence/tree/dev-sp) — all current work is on this branch.
+
 An explainable recommendation system that helps engineering teams decide **which Jira story to work on next** and **how to execute it** (Bob-led, Collaborative, or Human-led), backed by historical evidence from resolved tickets, PR analysis, and an LLM.
 
 ---
