@@ -60,6 +60,7 @@ function ImportPanel({ onImported, onCancel }: ImportPanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [jiraKey, setJiraKey] = useState("");
+  const [totalStoriesCount, setTotalStoriesCount] = useState<Number>();
   const [importMode, setImportMode] = useState<"sample" | "jira">("sample");
 
   const handleImportSample = useCallback(async () => {
@@ -68,6 +69,7 @@ function ImportPanel({ onImported, onCancel }: ImportPanelProps) {
     try {
       const res = await importSampleStories();
       onImported(res);
+      setTotalStoriesCount(res.stories.length);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -168,6 +170,7 @@ function ImportPanel({ onImported, onCancel }: ImportPanelProps) {
             Built-in Sample Backlog
           </button>
           <button
+            disabled
             onClick={() => setImportMode("jira")}
             style={{
               padding: "6px 14px",
@@ -219,9 +222,9 @@ function ImportPanel({ onImported, onCancel }: ImportPanelProps) {
                   marginTop: "2px",
                 }}
               >
-                Loads 7 realistic PIE project stories with full acceptance
+                {`Loads ${totalStoriesCount ?? "a set of"} realistic PIE project stories with full acceptance
                 criteria, blockers, and history. Duplicate imports are
-                automatically skipped.
+                automatically skipped.`}
               </p>
             </div>
             <Button
