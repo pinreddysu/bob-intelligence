@@ -96,6 +96,9 @@ bob-intelligence/
 │   ├── vite.config.ts
 │   ├── tsconfig.json
 │   └── package.json
+├── docs/
+│   ├── application-technical-overview.md   Full technical reference (architecture, DB models, API contracts, screen specs)
+│   └── business-user-workflow.md           Business user workflow, functional requirements, and screen specifications
 ├── scripts/
 │   └── smoke_test.sh         Milestone 4a end-to-end smoke test (M3 + M4a checks)
 ├── .bob/context.md
@@ -115,8 +118,15 @@ bob-intelligence/
 | 4d — LLM-driven mode recommendation (Bob CLI) | ✅ Complete | Tests not yet updated for 4d. |
 | 4c — Bob session link (full impl) | ⬜ Next | 409 gate active |
 | 5 — Outcome + comparison | ⬜ Pending | 409 gate active |
-| 6 — React frontend | ⬜ Pending | Placeholder pages exist |
+| 6 — React frontend (Mission Control) | ✅ Complete | Build passes. Full UI implemented. |
 | 7 — Smoke test + demo readiness | ⬜ Pending | |
+
+## Documentation Files Added
+
+| File | Purpose |
+|------|---------|
+| `docs/application-technical-overview.md` | Full technical reference — architecture, DB model relationships, complete API contracts, screen-by-screen frontend specs, field consumption guide, and gap analysis |
+| `docs/business-user-workflow.md` | Business user workflow, functional requirements, per-screen interaction inventory, API-to-UI field mapping, MVP scope vs deferred scope, and acceptance criteria checklist |
 
 ## Milestone 2 — What Was Implemented
 
@@ -422,3 +432,71 @@ When `GITHUB_TOKEN` is absent on a public repo, PR enrichment proceeds unauthent
 4. **Milestone 6** — React frontend (4-screen wizard).
 5. **Milestone 7** — Smoke test and demo readiness.
 6. **Milestone 8 (future)** — Developer match.
+
+## Milestone 6 — React Frontend (Mission Control)
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `frontend/src/vite-env.d.ts` | Vite `ImportMeta.env` type declarations (required for `VITE_API_BASE_URL`) |
+| `frontend/src/index.css` | Global CSS — Mission Control design tokens (colors, spacing, radii) |
+| `frontend/src/api/types.ts` | TypeScript types derived 1:1 from `backend/schemas.py` Pydantic models |
+| `frontend/src/components/ui.tsx` | Reusable components: Badge, ModeBadge, ApprovalBadge, ConfidenceBadge, SourceBadge, PriorityBadge, Card, Button, Skeleton, EmptyState, ErrorBanner, WarningBanner, SampleDataBanner, MetaRow, Divider |
+| `frontend/src/components/AppShell.tsx` | App shell: dark navy sidebar, sticky header, live connection indicator, responsive mobile nav |
+| `frontend/src/components/ApprovalPanel.tsx` | Approve / override controls wired to exact backend schemas |
+| `frontend/.env.example` | Documents `VITE_API_BASE_URL`; no secrets |
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `frontend/src/api/client.ts` | Replaced placeholder with full typed API client for all 8 verified endpoints |
+| `frontend/src/main.tsx` | Added global CSS import; changed story detail route to `/stories/:id` |
+| `frontend/src/pages/StorySelector.tsx` | Full Story Queue: searchable list, sample + Jira import panel, skeletons, error/empty states |
+| `frontend/src/pages/RecommendationView.tsx` | Story detail + mode hero + readiness panel + 4-tab evidence inspector + approval controls |
+| `frontend/src/pages/LinkBobWork.tsx` | Honest "Planned" placeholder (M4c not implemented) |
+| `frontend/src/pages/OutcomeComparison.tsx` | Honest "Planned" placeholder (M5 not implemented) |
+
+### API Endpoints Used
+
+| Method | Path | Used for |
+|--------|------|---------|
+| GET | /api/health | Connection indicator (on mount + manual recheck) |
+| GET | /api/stories | Story queue list |
+| POST | /api/stories/import | Sample and Jira story import |
+| GET | /api/stories/{id} | Story detail |
+| POST | /api/recommendations | Generate recommendation |
+| GET | /api/recommendations/{id} | Refresh recommendation after approval |
+| PATCH | /api/recommendations/{id}/mode-approve | Tech lead approve |
+| PATCH | /api/recommendations/{id}/mode-override | Tech lead override |
+
+### Design Decisions
+
+- No fabricated confidence percentages, priority ranks, or AI rankings — all values come from the API.
+- Sample data always shown with a visible `[SAMPLE DATA]` banner.
+- Approval identity is recorded as entered; UI explicitly warns it is not authenticated.
+- Bob Sessions and Outcomes pages show honest "Planned" state — never appear functional.
+- Evidence disclaimers inline: TF-IDF similarity ≠ semantic equivalence; merged PR ≠ AC met; test file detection is a heuristic.
+- `VITE_API_BASE_URL` env var for production; Vite dev proxy for local development (unchanged config).
+
+### Verification
+
+- `npm run build` (tsc + vite): ✅ clean, zero errors
+- `npx tsc --noEmit`: ✅ zero TypeScript errors
+- Backend files: zero changes — no backend tests affected by M6 work
+- Pre-existing test failure `test_list_stories_returns_imported_story` confirmed unrelated to M6
+
+### How to Run
+
+```bash
+# Terminal 1 — backend
+uvicorn backend.main:app --reload --port 8000
+
+# Terminal 2 — frontend
+cd frontend && npm run dev
+# → http://localhost:5173
+```
+
+For production, set `VITE_API_BASE_URL=https://your-backend-origin` in `frontend/.env.local`.
+

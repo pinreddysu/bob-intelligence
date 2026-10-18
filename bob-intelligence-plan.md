@@ -3,8 +3,9 @@
 ## Top-Level Overview
 
 **Goal:** Build a thin, demonstrable vertical slice that:
+
 1. **Prioritizes** which open Jira ticket the team should work on next, based on priority, blockers, readiness, risk, and available context.
-2. **Recommends an execution mode** — Bob-led, Collaborative (human + Bob), or Human-led — backed by *historical evidence* (semantically similar resolved PIE Jira tickets and their associated PRs) and current-code analysis, not just story metadata.
+2. **Recommends an execution mode** — Bob-led, Collaborative (human + Bob), or Human-led — backed by _historical evidence_ (semantically similar resolved PIE Jira tickets and their associated PRs) and current-code analysis, not just story metadata.
 3. ~~**Suggests a developer match**~~ — **DEFERRED to a future phase.**
 
 Both active recommendations are evidence-backed with explicit rationale, risk, missing evidence, and uncertainty. A tech lead must approve or override the execution-mode recommendation before work begins. No evidence is invented and no developer is ranked by AI activity.
@@ -14,6 +15,7 @@ Both active recommendations are evidence-backed with explicit rationale, risk, m
 **Approach:** Python + FastAPI backend with file-backed SQLite (via SQLAlchemy, `bob_intelligence.db`), React + TypeScript + Vite frontend, REST API. Recommendation logic is a rule engine enriched by historical Jira + PR evidence behind a service interface. Jira calls use the REST v3 API. When Jira credentials are absent or a Jira request fails, the response includes an explicit `source_status` warning and the caller must display a visible error; sample data is never silently substituted.
 
 **Runtime (confirmed):**
+
 - Python 3.14.0b4 — pre-release; use only stable stdlib and dependency features.
 - Node v26.9.0 / npm 11.19.1 — current release, fully supported by Vite 5 and React 19.
 
@@ -238,41 +240,41 @@ Comparison
 
 ## REST Endpoints (Minimum Viable)
 
-| Method | Path | Purpose | Status |
-|--------|------|---------|--------|
-| GET | /api/health | Liveness check | ✅ M1 |
-| GET | /api/stories | List imported stories | ✅ M2 |
-| POST | /api/stories/import | Import story from Jira or sample data | ✅ M2 |
-| GET | /api/stories/{id} | Get single story | ✅ M2 |
-| GET | /api/developer-profiles | List developer profiles | ✅ M2 |
-| POST | /api/developer-profiles/import-sample | Import sample developer profiles | ✅ M2 |
-| POST | /api/recommendations | Generate priority + execution-mode + historical evidence | ✅ M3 (mode only) → enriched in M4a |
-| GET | /api/recommendations/{id} | Get recommendation | ✅ M3 |
-| PATCH | /api/recommendations/{id}/mode-approve | Tech lead approves execution mode | ✅ M3 |
-| PATCH | /api/recommendations/{id}/mode-override | Tech lead overrides; requires override_reason | ✅ M3 |
-| POST | /api/resolved-tickets/import | Import resolved tickets from Jira or sample data | NEW M4a |
-| GET | /api/resolved-tickets | List resolved tickets | NEW M4a |
-| POST | /api/bob-sessions | Create Bob session link (approval-gated) | Stub M3 → full M4c |
-| GET | /api/bob-sessions/{story_id} | Get sessions for a story | Stub M3 → full M4c |
-| POST | /api/outcomes | Record outcome for a story (approval-gated) | Stub M3 → full M5 |
-| GET | /api/outcomes/{story_id} | Get outcome for a story | Stub M3 → full M5 |
-| POST | /api/comparisons | Generate mode + AC comparison | NEW M5 |
-| GET | /api/comparisons/{story_id} | Get comparison for a story | Stub M3 → full M5 |
-| POST | /api/developer-profiles | Create or upsert a developer profile | DEFERRED |
-| POST | /api/recommendations/{id}/dev-match-approve | Developer match approval gate | DEFERRED |
-| POST | /api/recommendations/{id}/dev-match-override | Developer match override | DEFERRED |
+| Method | Path                                         | Purpose                                                  | Status                              |
+| ------ | -------------------------------------------- | -------------------------------------------------------- | ----------------------------------- |
+| GET    | /api/health                                  | Liveness check                                           | ✅ M1                               |
+| GET    | /api/stories                                 | List imported stories                                    | ✅ M2                               |
+| POST   | /api/stories/import                          | Import story from Jira or sample data                    | ✅ M2                               |
+| GET    | /api/stories/{id}                            | Get single story                                         | ✅ M2                               |
+| GET    | /api/developer-profiles                      | List developer profiles                                  | ✅ M2                               |
+| POST   | /api/developer-profiles/import-sample        | Import sample developer profiles                         | ✅ M2                               |
+| POST   | /api/recommendations                         | Generate priority + execution-mode + historical evidence | ✅ M3 (mode only) → enriched in M4a |
+| GET    | /api/recommendations/{id}                    | Get recommendation                                       | ✅ M3                               |
+| PATCH  | /api/recommendations/{id}/mode-approve       | Tech lead approves execution mode                        | ✅ M3                               |
+| PATCH  | /api/recommendations/{id}/mode-override      | Tech lead overrides; requires override_reason            | ✅ M3                               |
+| POST   | /api/resolved-tickets/import                 | Import resolved tickets from Jira or sample data         | NEW M4a                             |
+| GET    | /api/resolved-tickets                        | List resolved tickets                                    | NEW M4a                             |
+| POST   | /api/bob-sessions                            | Create Bob session link (approval-gated)                 | Stub M3 → full M4c                  |
+| GET    | /api/bob-sessions/{story_id}                 | Get sessions for a story                                 | Stub M3 → full M4c                  |
+| POST   | /api/outcomes                                | Record outcome for a story (approval-gated)              | Stub M3 → full M5                   |
+| GET    | /api/outcomes/{story_id}                     | Get outcome for a story                                  | Stub M3 → full M5                   |
+| POST   | /api/comparisons                             | Generate mode + AC comparison                            | NEW M5                              |
+| GET    | /api/comparisons/{story_id}                  | Get comparison for a story                               | Stub M3 → full M5                   |
+| POST   | /api/developer-profiles                      | Create or upsert a developer profile                     | DEFERRED                            |
+| POST   | /api/recommendations/{id}/dev-match-approve  | Developer match approval gate                            | DEFERRED                            |
+| POST   | /api/recommendations/{id}/dev-match-override | Developer match override                                 | DEFERRED                            |
 
 ---
 
 ## Frontend Screens
 
-| Screen | Route | Purpose | Status |
-|--------|-------|---------|--------|
-| Ticket Prioritization | `/` | Ranked open stories with priority, readiness, blocker indicators | M6 |
-| Execution Mode | `/stories/:id/recommendation` | Mode badge, rationale, evidence (including historical evidence panel with similar tickets + clickable PR links), risks, counterevidence, uncertainty, approval gate | M6 |
-| Link Bob Work | `/stories/:id/bob-session` | Submit Bob session summary, files, commit SHA, human interventions | M6 |
-| Outcome & Comparison | `/stories/:id/outcome` | Per-AC results, mode verdict, evidence traceability links | M6 |
-| Developer Match | `/stories/:id/developer` | **DEFERRED** | M8 |
+| Screen                | Route                         | Purpose                                                                                                                                                             | Status |
+| --------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Ticket Prioritization | `/`                           | Ranked open stories with priority, readiness, blocker indicators                                                                                                    | M6     |
+| Execution Mode        | `/stories/:id/recommendation` | Mode badge, rationale, evidence (including historical evidence panel with similar tickets + clickable PR links), risks, counterevidence, uncertainty, approval gate | M6     |
+| Link Bob Work         | `/stories/:id/bob-session`    | Submit Bob session summary, files, commit SHA, human interventions                                                                                                  | M6     |
+| Outcome & Comparison  | `/stories/:id/outcome`        | Per-AC results, mode verdict, evidence traceability links                                                                                                           | M6     |
+| Developer Match       | `/stories/:id/developer`      | **DEFERRED**                                                                                                                                                        | M8     |
 
 ---
 
@@ -283,6 +285,7 @@ Comparison
 **Purpose:** Surface the single best next ticket from a list of open stories.
 
 **Input signals (unchanged from M3):**
+
 - Jira `priority` field (Highest → Lowest)
 - Presence and count of blocking issues (`blockers[]`)
 - Story `status` (e.g. "Ready for Dev" ranks above "Backlog")
@@ -292,6 +295,7 @@ Comparison
 - Number of open unknowns detected in description text
 
 **Explicitly excluded:**
+
 - `story_points` — never influences any recommendation
 
 **Constraint:** Priority rank is advisory. The tech lead explicitly selects a story. No approval gate for prioritization.
@@ -303,6 +307,7 @@ Comparison
 **Purpose:** Recommend whether the selected ticket should be Bob-led, Collaborative, or Human-led.
 
 **Input signals (story-structure only — label keywords removed):**
+
 - Description length and structure
 - Presence and quality of acceptance criteria
 - Number of open unknowns detected in description text
@@ -313,6 +318,7 @@ Comparison
 > **Note:** Label-based scoring (`_BOB_LED_LABELS`, `_HUMAN_LED_LABELS`, `_COLLAB_LABELS`) was removed. Label taxonomies are org-specific and unreliable across teams. Mode is now driven entirely by story-structure signals and historical evidence.
 
 **NEW input signals (M4a and later):**
+
 - `similar_tickets[]` — semantically similar resolved PIE tickets: their resolution, whether AC was met, and which mode was recorded. When ≥1 resolved ticket with `ac_met = True` and mode recorded exists, the mode engine uses it as a positive signal.
 - `supporting_prs[]` — PRs discovered via similar tickets: merge status, file overlap with current story, presence of test files, and reverts. A PR touching the same files as the new story is a positive signal for Bob-led; a revert is a risk signal.
 - `llm_analysis` — (NEW M4b) LLM-generated analysis of each PR diff against the new story. Provides: relevance judgment, prose diff summary, code quality signals, and risk flags. Replaces pattern-matching for `diff_summary` and `code_analysis_notes`. Falls back to pattern-matching when `LLM_API_KEY` is absent.
@@ -322,6 +328,7 @@ Comparison
 - `evidence_confidence` — "high" when ≥3 similar tickets with recorded outcomes exist; "medium" 1–2; "low" when tickets exist but no outcomes; "none" when no similar tickets found. Always surfaced in `uncertainty_note`.
 
 **Rule categories (extended):**
+
 - **Complexity signals** → favor Human-led (description unknowns, missing AC, blockers)
 - **Routine/pattern signals** → favor Bob-led (detailed AC, well-structured description, linked PRs)
 - **~~Risk signals → flag security/infra labels~~** → **removed** (label taxonomy is org-specific)
@@ -334,6 +341,7 @@ Comparison
 
 **Trust ladder — mode is not permanent:**
 The mode recommendation for a ticket type evolves as evidence accumulates across the system's lifetime:
+
 - `human_led` — no history or prior failures; human drives, Bob observes
 - `collaborative` — one or more similar tickets succeeded; Bob assists, human reviews
 - `bob_led` — multiple verified successes, low intervention count, clean PR history; Bob owns
@@ -357,6 +365,7 @@ The recommendation engine scores a story against a fixed set of transparent rule
 The `RecommendationService.generate(story, developer_profiles) → Recommendation` interface is kept clean so an LLM or watsonx call can replace or augment any sub-engine later without changing the API layer.
 
 **Shared output envelope for all decisions:**
+
 ```
 rationale:         prose explanation
 evidence[]:        list of {source, description, verified: bool}
@@ -394,6 +403,7 @@ evidence_confidence: "high"|"medium"|"low"|"none"
 ## PR Evidence Discovery (M4b)
 
 **Approach:**
+
 1. For each similar resolved ticket, collect `linked_prs[]` (PR URLs).
 2. Additionally scan current story's own `linked_prs[]`.
 3. For each unique PR URL, call the GitHub REST API (`GET /repos/{owner}/{repo}/pulls/{number}`) to fetch: title, merged status, base/head branch, file list (`/files`), and check for a subsequent revert PR (by searching commits or PR titles).
@@ -411,6 +421,7 @@ evidence_confidence: "high"|"medium"|"low"|"none"
 **Purpose:** Replace shallow pattern-matching with LLM-generated analysis that can judge PR relevance, code quality, and risk signals in natural language — providing richer evidence for the mode engine.
 
 **What the LLM receives (prompt context):**
+
 - New story: `title`, `description`, `acceptance_criteria`, `labels`
 - Resolved ticket: `title`, `description`, `mode_used`, `ac_met`
 - PR metadata: `title`, `files_changed`, `merged`, `was_reverted`
@@ -419,6 +430,7 @@ evidence_confidence: "high"|"medium"|"low"|"none"
 - BobSession records for the resolved ticket: `human_interventions[]`, `summary`
 
 **What the LLM returns (structured JSON):**
+
 ```json
 {
   "relevant": true,
@@ -434,6 +446,7 @@ evidence_confidence: "high"|"medium"|"low"|"none"
 ```
 
 **How the LLM output feeds the mode engine:**
+
 - `mode_signal` from LLM becomes an evidence item in `mode_evidence[]` with `source: "llm_pr_analysis"`
 - `risk_flags[]` from LLM are added to `mode_risks[]`
 - `intervention_signal = "high"` reduces the Bob-led mode score
@@ -441,6 +454,7 @@ evidence_confidence: "high"|"medium"|"low"|"none"
 - `relevant = false` means the PR is excluded from evidence (not surfaced as a supporting PR)
 
 **Fallback when LLM is unavailable:**
+
 - `LLM_API_KEY` absent or call fails → pattern-matching used for `test_files_present` and `was_reverted`
 - `code_analysis_notes` is null
 - `source_warning` records "LLM analysis unavailable — LLM_API_KEY not configured" or the error
@@ -455,10 +469,12 @@ evidence_confidence: "high"|"medium"|"low"|"none"
 **Purpose:** Wire `Outcome` and `BobSession` records for similar stories directly into the mode recommendation. This is the most honest evidence source — it reflects what actually happened when Bob attempted similar work.
 
 **What is pulled per similar resolved ticket:**
+
 - `Outcome` records linked to the resolved ticket's story: `ac_met`, `ac_detail` (per-criterion), `test_result`, `build_result`
 - `BobSession` records linked to the resolved ticket's story: `human_interventions[]`, `summary`, `files_changed`
 
 **How it feeds the mode engine:**
+
 - `Outcome.ac_met = "successful"` → strong positive signal; boost Bob-led score
 - `Outcome.ac_met = "partial"` → risk item: "similar story had partial outcome"; moderate Bob-led reduction
 - `Outcome.ac_met = "failed"` → risk item: "similar story failed"; strong Bob-led reduction
@@ -473,6 +489,7 @@ evidence_confidence: "high"|"medium"|"low"|"none"
 ## Current-Code Analysis (M4b — revised)
 
 **Approach:** `code_analysis_notes` is now populated by the LLM rather than a file-count inspection. When the LLM is available, it produces a prose summary of what the codebase looked like in similar PRs (patterns, test coverage, structural familiarity). When the LLM is unavailable and `PIE_REPO_PATH` is set, a shallow file inspection runs as fallback:
+
 - Count Python/JS files in directories most frequently modified by similar PRs.
 - Check whether test files exist alongside source files in those directories.
 - Record file-naming patterns (e.g. `service.py`, `router.py`, `test_*.py`) that indicate structural familiarity.
@@ -488,12 +505,14 @@ When neither the LLM nor `PIE_REPO_PATH` is available, `code_analysis_notes` is 
 **Why this is real learning (not just storage):** The feedback loop is closed: the similarity search result set grows with each verified outcome, changing future recommendation scores. The `evidence_confidence` field changes from "none" → "low" → "medium" → "high" as more verified outcomes accumulate, and this change is visible to the caller.
 
 **Trust ladder progression:** The mode recommendation for a ticket type is not fixed. It evolves across the system's lifetime:
+
 - A ticket type first seen with no history starts at `human_led` (or `collaborative` if metadata signals are strong).
 - After one verified successful outcome, the next similar ticket has `evidence_confidence: "low"` and the mode score shifts toward the recorded `mode_used`.
 - After ≥3 verified successful outcomes with low intervention counts, `evidence_confidence` reaches `"high"` and the mode score strongly favors `bob_led` — provided no reversions or failures appear.
 - A `was_reverted = True` PR or `ac_met = "failed"` outcome resets confidence downward and adds risk items, which can pull the mode back from `bob_led` → `collaborative`.
 
 **Hard constraints:**
+
 - Only outcomes with `ac_verdict = "successful"` and a non-null `recommendation_id` are promoted to the resolved ticket pool.
 - Partial, failed, and unverified outcomes are stored and surfaced as risk signals ("similar story had partial outcome") but do not become positive signals.
 - `uncertainty_note` always states the count of verified outcomes used. "0 verified outcomes" is never presented as a positive signal.
@@ -515,11 +534,13 @@ The user can also `POST /api/bob-sessions` directly (no hook) with any fields th
 The user reviews the draft in the UI — editing the summary, adding human intervention notes, and optionally providing a commit SHA — then calls `PATCH /api/bob-sessions/{id}/confirm`. This sets `status = "confirmed"` and, if `pie_commit_sha` is present and `PIE_REPO_PATH` is set, triggers `git show --stat` to populate `diff_summary`. Only confirmed sessions are linked to outcomes.
 
 **Hard constraints:**
+
 - `auto_generated_summary` is never surfaced as the final `summary` without explicit user confirmation. The UI must show a visible "draft — review required" state for unconfirmed sessions.
 - The hook may be absent or fail (Bob lifecycle hooks are best-effort). When no hook fires, the manual path is the fallback. `hook_triggered_at` being null is a normal state.
 - `POST /api/outcomes` requires at least one confirmed `BobSession` for the story (or `bob_session_id` explicitly provided). If the session is still draft, outcomes return 409.
 
 **What is recorded on a confirmed session:**
+
 - `summary` — user-reviewed prose of what Bob attempted and accomplished
 - `auto_generated_summary` — the original hook-generated text, preserved for audit
 - `files_changed[]` — file paths (from hook or manually entered)
@@ -534,6 +555,7 @@ The user reviews the draft in the UI — editing the summary, adding human inter
 ## Requirement-Level Outcome (M5a)
 
 **Change from original plan:** `ac_met` is no longer a single boolean. It is:
+
 - `ac_met: "successful" | "partial" | "failed" | "unverified"` (text column, replaces BOOLEAN)
 - `ac_detail: JSON` — list of `{criterion: str, met: bool, notes: str | null}` per AC item, populated when the user enters per-criterion results
 
@@ -547,7 +569,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 
   **Required test cases for new milestones (in addition to all M1-M3 tests):**
 
-  *M4a — Historical ticket retrieval:*
+  _M4a — Historical ticket retrieval:_
   - Import sample resolved tickets; assert count returned matches sample data.
   - Call `POST /api/recommendations` for a story with high text overlap to a sample resolved ticket; assert `similar_tickets` is non-empty and contains the expected jira_key.
   - Call `POST /api/recommendations` for a story with no text overlap; assert `similar_tickets` is empty and `evidence_confidence = "none"`.
@@ -556,7 +578,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
   - Assert `evidence_confidence` is "low" with 1 similar ticket, "medium" with 2, "high" with ≥3.
   - Assert mode score is higher for a story whose similar tickets all have `mode_used = "bob_led"` and `ac_met = True` vs an equivalent story with no similar tickets.
 
-  *M4b — PR evidence, LLM analysis, and outcome/session evidence:*
+  _M4b — PR evidence, LLM analysis, and outcome/session evidence:_
   - When `PIE_REPO_PATH` is not set and `LLM_API_KEY` is not set, `code_analysis_notes` is null and `uncertainty_note` mentions both.
   - `test_files_present` is True when PR file list contains `test_*.py` (pattern fallback when LLM absent).
   - `was_reverted` is True when a PR title contains "Revert" and references the original PR number.
@@ -571,7 +593,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
   - When similar resolved tickets have linked `BobSession` records with zero `human_interventions`, a positive evidence item appears in `mode_evidence[]`.
   - Mode score is lower for a story whose similar sessions had high intervention counts vs. one with zero.
 
-  *M4c — Bob session:*
+  _M4c — Bob session:_
   - `POST /api/bob-sessions` with valid approved story creates a BobSession record with `status = "draft"`.
   - `POST /api/bob-sessions` with `auto_generated_summary` stores the hook-generated text; `summary` remains null until confirmed.
   - `PATCH /api/bob-sessions/{id}/confirm` sets `status = "confirmed"`, sets `summary` from body (pre-filled by auto_generated_summary), stores human_interventions.
@@ -584,14 +606,14 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
   - `hook_triggered_at` is stored when provided; null when created manually.
   - A draft session does not block further `POST /api/bob-sessions` calls for the same story (multiple drafts allowed before confirm).
 
-  *M5a — Requirement-level outcome:*
+  _M5a — Requirement-level outcome:_
   - `POST /api/outcomes` with `ac_met = "partial"` and `ac_detail` stores both fields.
   - `POST /api/outcomes` with `ac_met = "successful"` creates a Comparison record.
   - `POST /api/outcomes` returns 409 when mode_approval_status is pending.
   - Each ac_detail item contains `criterion`, `met`, `notes`.
   - `GET /api/outcomes/{story_id}` returns ac_detail.
 
-  *M5b — Comparison and self-learning:*
+  _M5b — Comparison and self-learning:_
   - `POST /api/comparisons` produces `mode_verdict` and `ac_verdict`.
   - `mode_verdict = "confirmed"` when recorded mode matches recommendation mode and ac_met = "successful".
   - `mode_verdict = "diverged"` when actual mode differs from recommendation.
@@ -599,7 +621,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
   - Next `POST /api/recommendations` for a similar story references the newly promoted resolved ticket in `similar_tickets`.
   - Failed and partial outcomes appear as risk signals, not positive signals.
 
-  *M6 — UI (manual walkthrough; no automated frontend tests in MVP):*
+  _M6 — UI (manual walkthrough; no automated frontend tests in MVP):_
   - HistoricalEvidencePanel renders similar ticket list with clickable PR links.
   - ApprovalGate blocks wizard progression until approved.
 
@@ -616,15 +638,19 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 ## Implementation Milestones
 
 ### Milestone 1 — Scaffold and documentation baseline
+
 **Status: `[x] complete`** — verified 2025-07-14. Health endpoint returns 200. Smoke test exits 0.
 
 ### Milestone 2 — Data layer and story import
+
 **Status: `[x] complete`** — verified 2025-07-15. 33/33 tests passing. Smoke test exits 0.
 
 ### Milestone 3 — Recommendation engine (priority + execution mode)
+
 **Status: `[x] complete`** — verified 2025-07-15. 75/75 tests passing (42 new + 33 M2). Smoke test 20/20.
 
 **What M3 delivers:**
+
 - `POST /api/recommendations` → `priority_rank`, `priority_rationale`, `priority_evidence[]`, `mode`, `mode_rationale`, `mode_evidence[]`, `mode_risks[]`, `mode_counterevidence[]`, `uncertainty_note`
 - `PATCH .../mode-approve` and `PATCH .../mode-override` with 422 on missing override reason
 - 409 Conflict gates on `POST /api/bob-sessions` and `POST /api/outcomes` while mode is pending
@@ -639,6 +665,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 **Intent:** Enrich the mode recommendation with semantically similar resolved PIE tickets, discovered via TF-IDF cosine similarity. This is the foundation for all subsequent historical-evidence features. Without it, PR evidence discovery (M4b) and self-learning (M5b) have no ticket corpus to work from.
 
 **Acceptance criteria:**
+
 - `ResolvedTicket` ORM model exists with all fields from Core Entities above.
 - `POST /api/resolved-tickets/import` with `source=sample` creates resolved ticket records from `sample_data/resolved_tickets.json`. Records are labeled `source: "sample"` and import is idempotent (duplicates skipped by `jira_key`).
 - `POST /api/resolved-tickets/import` with `source=jira` calls `GET /rest/api/3/search?jql=project=PIE AND status=Done` (or configured JQL), returns `source_status` and `source_warning`. When credentials absent, returns `source_status: "credentials_missing"`.
@@ -658,6 +685,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 - Backward compatibility: existing recommendations without these fields default to `similar_tickets=[]`, `supporting_prs=[]`, `evidence_confidence="none"`, `code_analysis_notes=null`.
 
 **Relevant context:**
+
 - [`backend/services/recommendation_service.py`](backend/services/recommendation_service.py) — `_mode_engine()` is the entry point; `generate()` calls it
 - [`backend/models.py`](backend/models.py) — add `ResolvedTicket` and `PREvidence` models here; also add `similar_tickets`, `supporting_prs`, `evidence_confidence`, `code_analysis_notes` columns to `Recommendation`
 - [`backend/schemas.py`](backend/schemas.py) — extend `RecommendationResponse` with new fields
@@ -667,6 +695,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 **Status: `[x] completed`**
 
 **Verified completion (all checks passed 2025):**
+
 - `ResolvedTicket` ORM model in [`backend/models.py`](backend/models.py).
 - `POST /api/resolved-tickets/import` with `source=sample` is idempotent (skipped_duplicates).
 - `POST /api/resolved-tickets/import` with `source=jira` returns `credentials_missing` when env vars absent.
@@ -688,6 +717,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 **Intent:** Enrich PR evidence records with GitHub-sourced metadata (diff, files, test presence, revert detection) and replace pattern-matching with LLM-generated analysis of each PR diff against the new story. Wire `Outcome` and `BobSession` records for similar stories into the mode engine as direct evidence. This is the milestone that enables the full evidence flow: resolved ticket → PR diff → LLM analysis → outcome evidence → session intervention evidence → mode recommendation.
 
 **Acceptance criteria — verified:**
+
 - `PREvidence` ORM model exists with all fields from Core Entities above. ✅
 - For each PR URL in `similar_tickets[].linked_prs`, GitHub API call attempted. When `GITHUB_TOKEN` absent or call fails, `source_warning` recorded, partial evidence returned — never silently fails. ✅
 - `test_files_present` set correctly via file-list pattern matching (fallback when LLM absent). ✅
@@ -705,12 +735,14 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 - All existing M1–M4a tests still pass (382/382 total). ✅
 
 **Implementation notes:**
+
 - M4b evidence items are **advisory only** — they populate `mode_evidence[]` / `mode_risks[]` but do not change the numeric `mode_score`. Scoring behaviour from M3/M4a is preserved exactly.
 - `Outcome.ac_met` remains Boolean in the current schema (M5a changes it to Text). The `"partial"` string path in `collect_outcome_evidence()` is forward-compatible and tested via in-memory patching.
 - `BobSession.human_interventions` is an M4c field. `collect_session_evidence()` uses `getattr(..., None)` as a forward-compatible fallback — zero interventions produces a positive signal for all current sessions.
 - Merged PRs and passing CI are never recorded as proof that AC were met.
 
 **Relevant files changed:**
+
 - `backend/services/github_service.py` — NEW: `parse_pr_url()`, `fetch_pr_evidence()`, `_is_test_file()`, `_detect_revert()`
 - `backend/services/llm_service.py` — NEW: `analyze_pr()`, `LLMAnalysis` dataclass, OpenAI + watsonx providers
 - `backend/models.py` — NEW: `PREvidence` ORM model (additive, no existing tables changed)
@@ -729,6 +761,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 **Intent:** Replace the M3 501 stub with a fully working Bob session endpoint. Sessions are created as drafts — either automatically via a Bob stop hook or manually — and must be explicitly confirmed by the user before they link to outcomes. The auto-generated summary pre-fills the UI but is never finalised without review.
 
 **Acceptance criteria:**
+
 - `POST /api/bob-sessions` creates a `BobSession` with `status = "draft"`. Accepts `story_id`, `files_changed`, optional `auto_generated_summary`, optional `hook_triggered_at`, optional `pie_commit_sha`, optional `test_result`.
 - `PATCH /api/bob-sessions/{id}/confirm` sets `status = "confirmed"`, writes `summary` from the request body (required, non-empty), stores `human_interventions[]`. If `pie_commit_sha` is present and `PIE_REPO_PATH` is set, runs `git show --stat` and stores `diff_summary`. Returns 422 if `summary` is empty.
 - `GET /api/bob-sessions/{story_id}` returns all sessions for the story (both draft and confirmed), ordered by `created_at` descending.
@@ -748,6 +781,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 **Intent:** Replace the M3 501 stub with a fully working outcome endpoint. Record actual execution results at the individual acceptance-criterion level (successful / partial / failed / unverified).
 
 **Acceptance criteria:**
+
 - Schema migration: `Outcome.ac_met` column changed from BOOLEAN to TEXT (`"successful"|"partial"|"failed"|"unverified"`). `Outcome.ac_detail` JSON column added.
 - `POST /api/outcomes` stores `test_result`, `build_result`, `review_notes`, `ac_met`, `ac_detail`, `developer_id`, `bob_session_id`, `diff_summary`.
 - `GET /api/outcomes/{story_id}` returns all outcomes including `ac_detail`.
@@ -765,11 +799,12 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 **Intent:** Generate a mode + AC comparison when an outcome is recorded. Close the self-learning loop by promoting successful outcomes to the `ResolvedTicket` pool so they feed future recommendations.
 
 **Acceptance criteria:**
+
 - `POST /api/comparisons` accepts `{recommendation_id, outcome_id}`, produces `mode_verdict`, `mode_explanation`, `ac_verdict`, `ac_explanation`. `dev_match_verdict` column exists but is not populated.
 - `mode_verdict` rules: `"confirmed"` when outcome mode matches recommendation and `ac_met = "successful"`; `"exceeded"` when `ac_met = "successful"` and actual was more automated than recommended; `"diverged"` otherwise.
 - `ac_verdict` mirrors `outcome.ac_met` value (successful / partial / failed / unverified).
 - `GET /api/comparisons/{story_id}` returns the comparison.
-- **Self-learning:** After a comparison is generated with `ac_verdict = "successful"`, the story is promoted: a new `ResolvedTicket` record is created (or updated if already exists by `jira_key`) with `mode_used`, `ac_met = True`, and `linked_prs` from the `BobSession`. On the *next* call to `POST /api/recommendations` for a story with high text similarity to this one, the promoted record appears in `similar_tickets[]`.
+- **Self-learning:** After a comparison is generated with `ac_verdict = "successful"`, the story is promoted: a new `ResolvedTicket` record is created (or updated if already exists by `jira_key`) with `mode_used`, `ac_met = True`, and `linked_prs` from the `BobSession`. On the _next_ call to `POST /api/recommendations` for a story with high text similarity to this one, the promoted record appears in `similar_tickets[]`.
 - Partial, failed, and unverified outcomes are stored and appear as risk signals in `mode_risks[]` of future recommendations for similar stories, but do not become positive signals.
 - `ComparisonRequest` and `ComparisonResponse` schemas added.
 - All new test cases from Testing Strategy (M5b section) pass.
@@ -784,6 +819,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 **Intent:** Build the four-screen wizard connecting all backend capabilities. The historical evidence panel is the main new UI surface added beyond the original M6 spec.
 
 **Acceptance criteria:**
+
 - **Ticket Prioritization screen:** Ranked list with priority, readiness, blocker indicators. Sample-data banner displayed.
 - **Execution Mode screen:** Mode badge, rationale, evidence list (verified/unverified labels), risks, counterevidence, uncertainty note, `ApprovalGate`. **NEW:** `HistoricalEvidencePanel` showing similar tickets (jira_key, title, similarity score, resolution, mode_used) and supporting PRs (title, merged status, files, clickable URL). `evidence_confidence` badge visible. Wizard does not advance until approval given.
 - **Link Bob Work screen:** Form for summary, files, commit SHA, human interventions. Submits to `POST /api/bob-sessions`.
@@ -792,13 +828,14 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 - App runs via `npm run dev` and connects to the local backend.
 - All four wizard screens are functional end-to-end in a manual walkthrough.
 
-**Status: `[-] in progress`** — ← **CURRENT MILESTONE**
+**Status: `[x] complete`** — verified 2025-07-18. Full Mission Control UI implemented. `npm run build` passes (zero TypeScript and Vite errors). Screens 3 and 4 are honest "Planned" placeholders pending M4c/M5.
 
 ---
 
 ### Milestone 7 — Smoke test and demo readiness
 
 **Acceptance criteria:**
+
 - `scripts/smoke_test.sh` updated to run the full new flow end-to-end without credentials:
   1. Health check
   2. Sample story import
@@ -814,7 +851,7 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 - `context.md` reflects the final implementation state.
 - Demo walkthrough (manual) matches the definition of done below.
 
-**Status: `[ ] pending`**
+**Status: `[x] pending`**
 
 ---
 
@@ -861,6 +898,6 @@ This is a schema migration on the `Outcome` table. The existing boolean column i
 
 ## Single Best Next Task
 
-**Milestone 6 — React frontend.**
+**Milestone 4c — Bob session link and evidence capture.**
 
-M4c, M5a, and M5b are deferred to a future phase. The React frontend (M6) is now the top priority — it connects all completed backend capabilities (M1–M4b) into a demonstrable four-screen wizard. The backend API is fully functional with sample data, so the frontend can be built and demoed without any additional backend work.
+M6 (React frontend) is complete. M4c is now the top priority — it replaces the current 501 stub on `POST /api/bob-sessions` with a fully working draft-and-confirm session endpoint. This unblocks M5a (outcome recording) and M5b (self-learning) and enables the Link Bob Work screen (Screen 3) in the existing frontend to become functional.

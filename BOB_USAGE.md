@@ -549,3 +549,92 @@ When `LLM_API_KEY` is absent or Bob CLI fails, `analyze_mode()` returns `mode="c
 - `bob run --format json` envelope structure assumed; verify against actual Bob CLI output.
 - `select_files_for_llm()` uses first-page patches only; relevance ranking is retrieval signal, not mode decision.
 - `ticket_readiness` field on `Recommendation` is always `null` (service removed as unimplemented).
+
+## Entry 8
+
+**Milestone:** 6 — React Frontend (Mission Control)
+
+### What was implemented
+
+Full Mission Control frontend replacing all placeholder pages. The existing Vite + React + TypeScript scaffold was kept intact; only `frontend/` files were changed. Zero backend files were modified.
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `frontend/src/vite-env.d.ts` | Vite env type declarations |
+| `frontend/src/index.css` | Global design tokens and reset |
+| `frontend/src/api/types.ts` | TypeScript types derived from Pydantic schemas |
+| `frontend/src/components/ui.tsx` | Shared UI primitives |
+| `frontend/src/components/AppShell.tsx` | Sidebar + header shell |
+| `frontend/src/components/ApprovalPanel.tsx` | Approve/override form |
+| `frontend/.env.example` | Env var documentation |
+
+### Files modified
+
+`frontend/src/api/client.ts`, `frontend/src/main.tsx`, `frontend/src/pages/StorySelector.tsx`, `frontend/src/pages/RecommendationView.tsx`, `frontend/src/pages/LinkBobWork.tsx`, `frontend/src/pages/OutcomeComparison.tsx`
+
+### Verification performed
+
+- `npm run build`: ✅ zero errors (tsc + vite)
+- `npx tsc --noEmit`: ✅ zero TypeScript errors
+- Backend tests: pre-existing failure in `test_milestone2.py` confirmed unrelated; no backend files changed
+
+### Known limitations
+
+- Bob Sessions (M4c) and Outcomes (M5) pages are honest "Planned" placeholders — backend not implemented
+- Developer match fields deferred per backend design — not shown
+- Approval identity is not authenticated
+
+
+---
+
+## Entry 9
+
+**Date:** 2025-07-18
+**Objective:** Add comprehensive documentation — technical overview and business user workflow
+
+**Prompt summary:** Create `docs/application-technical-overview.md` and `docs/business-user-workflow.md` to document the completed system state (M1–M6). No backend or frontend code was changed.
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `docs/application-technical-overview.md` | Full technical reference — architecture diagram, complete DB model field listings, REST API contract with request/response schemas, screen-by-screen frontend specs, field consumption guide, current state and gap analysis |
+| `docs/business-user-workflow.md` | Business user workflow and functional requirements — per-screen interaction inventory, API-to-UI field mapping, MVP vs deferred scope table, validation and error-state rules, acceptance criteria checklist, navigation rules |
+
+### What is documented
+
+**`application-technical-overview.md`** covers:
+- Technology stack and project structure
+- Architecture diagram (browser → Vite proxy → FastAPI → SQLAlchemy → SQLite)
+- All seven implemented features (M1–M4d, M6) with `[IMPLEMENTED]` / `[DEFERRED]` labels
+- Complete ORM model fields and FK relationships (Story, Recommendation, ResolvedTicket, PREvidence, BobSession, Outcome, Comparison, DeveloperProfile)
+- Full REST endpoint table with HTTP method, path, request schema, response schema, and status
+- Screen-by-screen frontend spec (StorySelector, RecommendationView, LinkBobWork placeholder, OutcomeComparison placeholder)
+- `RecommendationResponse` field-to-UI mapping
+- Current state and gaps (implemented, incomplete, missing frontend deps, deferred)
+- Recommended component data flow and per-screen API needs
+
+**`business-user-workflow.md`** covers:
+- Executive summary and business value
+- Tech Lead and Developer personas
+- End-to-end user journey (primary path + approval/override flow)
+- Screen 1 (Story Selector) and Screen 2 (Recommendation View) full functional specifications
+- Complete button and interaction inventory
+- API-to-UI mapping for all `RecommendationResponse` fields
+- State, validation, error, and empty-state rules
+- MVP scope vs deferred scope (Screens 3 and 4)
+- Proposed navigation and screen hierarchy
+- Acceptance criteria verification checklist
+- Implementation gaps and running instructions
+
+### Verification performed
+
+- Both files created and reviewed for accuracy against the implemented codebase.
+- No backend or frontend files were modified — zero test impact.
+
+### Known limitations
+
+- `docs/application-technical-overview.md` references `ticket_readiness_service.txt` as a staged service (not yet a `.py` module); its implementation status reflects the file's current state.
+- Screens 3 (Link Bob Work) and 4 (Outcome Comparison) are documented as `[DEFERRED]` — both show honest "Planned" placeholders in the current frontend.
