@@ -13,19 +13,25 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.database import init_db
+from backend.database import init_db, SessionLocal
 from backend.routers import stories
 from backend.routers import developer_profiles
 from backend.routers import recommendations
 from backend.routers import bob_sessions
 from backend.routers import outcomes
 from backend.routers import resolved_tickets
+from backend.routers.resolved_tickets import _load_sample, _upsert_tickets
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create database tables on startup (no-op if they already exist)."""
+    """Create database tables on startup, then seed sample resolved tickets if the table is empty."""
     init_db()
+    db = SessionLocal()
+    try:
+        _upsert_tickets(_load_sample(), db)
+    finally:
+        db.close()
     yield
 
 
