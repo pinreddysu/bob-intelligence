@@ -45,6 +45,7 @@ import {
   getStory,
   createRecommendation,
   getRecommendation,
+  getRecommendationForStory,
 } from '../api/client'
 import type { Story, Recommendation, EvidenceItem, RiskItem } from '../api/types'
 
@@ -1310,6 +1311,14 @@ export default function RecommendationView() {
       .catch(e => setStoryError(String(e)))
       .finally(() => setStoryLoading(false))
   }, [id])
+
+  // Load existing recommendation for this story on mount (if any)
+  useEffect(() => {
+    if (!story) return
+    getRecommendationForStory(story.id)
+      .then(existing => setRec(existing))
+      .catch(() => { /* no recommendation yet — generate banner will show */ })
+  }, [story?.id])
 
   const handleGenerate = useCallback(async () => {
     if (!id) return

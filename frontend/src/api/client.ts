@@ -134,6 +134,13 @@ export async function getRecommendation(id: string): Promise<Recommendation> {
   )
 }
 
+export async function getRecommendationForStory(storyId: string): Promise<Recommendation> {
+  return request<Recommendation>(
+    'GET',
+    `/recommendations/by-story/${encodeURIComponent(storyId)}`,
+  )
+}
+
 export async function approveMode(
   recId: string,
   body: ModeApproveRequest,
