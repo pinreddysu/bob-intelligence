@@ -1,16 +1,20 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { clsx } from 'clsx'
 import {
   Brain,
   LayoutList,
-  ChevronRight,
   Menu,
   X,
   RefreshCw,
   AlertCircle,
-  CheckCircle2,
   Loader2,
+  Sparkles,
+  GitBranch,
+  BarChart3,
+  Search,
+  Activity,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { healthCheck } from '../api/client'
 
@@ -32,10 +36,22 @@ function ConnectionIndicator({
       <button
         title="Checking backend connection…"
         onClick={onCheck}
-        style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontSize: '12.5px',
+          fontWeight: 500,
+          color: 'var(--color-text-muted)',
+          background: 'var(--color-surface-subtle)',
+          padding: '5px 10px',
+          borderRadius: 'var(--radius-full)',
+          border: '1px solid var(--color-border)',
+          cursor: 'pointer',
+        }}
       >
-        <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
-        Connecting
+        <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-accent)' }} />
+        <span>Connecting…</span>
       </button>
     )
   }
@@ -44,10 +60,22 @@ function ConnectionIndicator({
       <button
         title="Backend connected — click to recheck"
         onClick={onCheck}
-        style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--color-green)', background: 'none', border: 'none', cursor: 'pointer' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontSize: '12px',
+          fontWeight: 600,
+          color: 'var(--color-green-text)',
+          background: 'var(--color-green-bg)',
+          padding: '5px 10px',
+          borderRadius: 'var(--radius-full)',
+          border: '1px solid var(--color-green-border)',
+          cursor: 'pointer',
+        }}
       >
-        <CheckCircle2 size={13} />
-        Connected
+        <span className="pulse-dot pulse-dot-green" />
+        <span>Connected</span>
       </button>
     )
   }
@@ -56,10 +84,22 @@ function ConnectionIndicator({
       <button
         title="Backend unreachable — click to retry"
         onClick={onCheck}
-        style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--color-red)', background: 'none', border: 'none', cursor: 'pointer' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontSize: '12px',
+          fontWeight: 600,
+          color: 'var(--color-red-text)',
+          background: 'var(--color-red-bg)',
+          padding: '5px 10px',
+          borderRadius: 'var(--radius-full)',
+          border: '1px solid var(--color-red-border)',
+          cursor: 'pointer',
+        }}
       >
-        <AlertCircle size={13} />
-        Offline
+        <AlertCircle size={13} style={{ color: 'var(--color-red)' }} />
+        <span>Offline — Retry</span>
       </button>
     )
   }
@@ -67,10 +107,21 @@ function ConnectionIndicator({
     <button
       title="Check backend connection"
       onClick={onCheck}
-      style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        fontSize: '12px',
+        color: 'var(--color-text-muted)',
+        background: 'var(--color-surface-subtle)',
+        padding: '5px 10px',
+        borderRadius: 'var(--radius-full)',
+        border: '1px solid var(--color-border)',
+        cursor: 'pointer',
+      }}
     >
-      <AlertCircle size={13} />
-      Unknown
+      <Activity size={13} />
+      <span>Check Status</span>
     </button>
   )
 }
@@ -85,44 +136,11 @@ interface NavItemProps {
   label: string
   end?: boolean
   planned?: boolean
+  badge?: string
   onClick?: () => void
 }
 
-function NavItem({ to, icon, label, end, planned, onClick }: NavItemProps) {
-  if (planned) {
-    return (
-      <div
-        title="Not yet implemented"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          padding: '8px 12px',
-          borderRadius: 'var(--radius)',
-          color: '#4B5563',
-          cursor: 'not-allowed',
-          fontSize: '13.5px',
-          userSelect: 'none',
-        }}
-      >
-        <span style={{ opacity: 0.5 }}>{icon}</span>
-        <span style={{ opacity: 0.5 }}>{label}</span>
-        <span style={{
-          marginLeft: 'auto',
-          fontSize: '10px',
-          fontWeight: 600,
-          color: '#374151',
-          background: '#1F2937',
-          borderRadius: '3px',
-          padding: '1px 5px',
-          letterSpacing: '0.04em',
-        }}>
-          PLANNED
-        </span>
-      </div>
-    )
-  }
-
+function NavItem({ to, icon, label, end, planned, badge, onClick }: NavItemProps) {
   return (
     <NavLink
       to={to}
@@ -132,21 +150,48 @@ function NavItem({ to, icon, label, end, planned, onClick }: NavItemProps) {
         display: 'flex',
         alignItems: 'center',
         gap: '10px',
-        padding: '8px 12px',
+        padding: '9px 12px',
         borderRadius: 'var(--radius)',
-        color: isActive ? '#fff' : 'var(--color-sidebar-text)',
-        background: isActive ? 'var(--color-sidebar-active)' : 'transparent',
+        color: isActive ? '#FFFFFF' : planned ? 'var(--color-sidebar-text-muted)' : 'var(--color-sidebar-text)',
+        background: isActive
+          ? 'linear-gradient(135deg, rgba(37, 99, 235, 0.9) 0%, rgba(79, 70, 229, 0.9) 100%)'
+          : 'transparent',
         fontSize: '13.5px',
-        fontWeight: isActive ? 600 : 400,
+        fontWeight: isActive ? 600 : 500,
         textDecoration: 'none',
-        transition: 'background 0.1s, color 0.1s',
+        transition: 'all 0.15s ease',
+        boxShadow: isActive ? '0 2px 8px rgba(37, 99, 235, 0.35)' : 'none',
       })}
-      className={({ isActive }) =>
-        clsx(!isActive && 'hover:bg-[#1F2937]')
-      }
+      className="sidebar-nav-item"
     >
-      {icon}
-      {label}
+      {({ isActive }) => (
+        <>
+          <span style={{ color: isActive ? '#FFFFFF' : 'var(--color-sidebar-text-muted)' }}>
+            {icon}
+          </span>
+          <span style={{ flex: 1 }}>{label}</span>
+          {badge && (
+            <span
+              style={{
+                fontSize: '9.5px',
+                fontWeight: 700,
+                color: isActive ? '#FFFFFF' : planned ? '#FBBF24' : '#60A5FA',
+                background: isActive
+                  ? 'rgba(255,255,255,0.2)'
+                  : planned
+                  ? 'rgba(245, 158, 11, 0.15)'
+                  : 'rgba(37,99,235,0.15)',
+                border: planned && !isActive ? '1px solid rgba(245, 158, 11, 0.3)' : 'none',
+                borderRadius: '4px',
+                padding: '2px 6px',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {badge}
+            </span>
+          )}
+        </>
+      )}
     </NavLink>
   )
 }
@@ -171,80 +216,229 @@ function Sidebar({ open, onClose }: SidebarProps) {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.5)',
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
             zIndex: 40,
           }}
         />
       )}
-      <nav
+      <aside
         aria-label="Main navigation"
         style={{
           width: 'var(--sidebar-width)',
           minHeight: '100vh',
           background: 'var(--color-sidebar)',
+          borderRight: '1px solid var(--color-sidebar-border)',
           display: 'flex',
           flexDirection: 'column',
-          padding: '0',
           flexShrink: 0,
           position: 'fixed',
           top: 0,
           left: open ? 0 : 'calc(-1 * var(--sidebar-width))',
           bottom: 0,
           zIndex: 50,
-          transition: 'left 0.2s ease',
+          transition: 'left 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
-        className="lg-sidebar"
+        className="app-sidebar"
       >
         {/* Brand */}
         <div
           style={{
-            padding: '18px 16px 16px',
-            borderBottom: '1px solid #1F2937',
+            padding: '20px 18px 18px',
+            borderBottom: '1px solid var(--color-sidebar-border)',
             display: 'flex',
             alignItems: 'center',
-            gap: '10px',
+            gap: '12px',
           }}
         >
-          <Brain size={22} color="#60A5FA" />
-          <div>
-            <p style={{ color: '#F9FAFB', fontWeight: 700, fontSize: '14px', lineHeight: 1.3 }}>
-              Bob Intelligence
+          <div
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #2563EB 0%, #7C3AED 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 0 16px rgba(79, 70, 229, 0.4)',
+              flexShrink: 0,
+            }}
+          >
+            <Brain size={20} color="#FFFFFF" />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <p
+                style={{
+                  color: '#F8FAFC',
+                  fontWeight: 700,
+                  fontSize: '14.5px',
+                  letterSpacing: '-0.02em',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Bob Intelligence
+              </p>
+              <span
+                style={{
+                  fontSize: '9.5px',
+                  fontWeight: 700,
+                  background: 'rgba(37, 99, 235, 0.25)',
+                  color: '#60A5FA',
+                  border: '1px solid rgba(96, 165, 250, 0.3)',
+                  padding: '1px 5px',
+                  borderRadius: '4px',
+                }}
+              >
+                v1.0
+              </span>
+            </div>
+            <p
+              style={{
+                color: 'var(--color-sidebar-text-muted)',
+                fontSize: '11px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                marginTop: '1px',
+              }}
+            >
+              <Sparkles size={10} style={{ color: '#F59E0B' }} />
+              Autonomous Mission Control
             </p>
-            <p style={{ color: '#6B7280', fontSize: '11px' }}>Mission Control</p>
           </div>
         </div>
 
         {/* Navigation links */}
-        <div style={{ padding: '12px 8px', flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <p style={{ color: '#4B5563', fontSize: '11px', fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', padding: '4px 12px 6px' }}>
-            Execution Decisions
+        <div
+          style={{
+            padding: '16px 10px',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+          }}
+        >
+          <p
+            style={{
+              color: 'var(--color-sidebar-text-faint)',
+              fontSize: '11px',
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              padding: '6px 12px 6px',
+            }}
+          >
+            Autonomous Execution
           </p>
           <NavItem
             to="/"
             end
             icon={<LayoutList size={16} />}
             label="Story Queue"
+            badge="LIVE"
+            onClick={onClose}
+          />
+
+          {/* Future roadmap section */}
+          <div style={{ margin: '10px 8px 6px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }} />
+          <p
+            style={{
+              color: 'var(--color-sidebar-text-faint)',
+              fontSize: '10.5px',
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              padding: '6px 12px 4px',
+            }}
+          >
+            Future Features
+          </p>
+          <NavItem
+            to="/sessions"
+            icon={<GitBranch size={16} />}
+            label="Bob Sessions"
+            planned
+            badge="FUTURE"
             onClick={onClose}
           />
           <NavItem
-            to="#"
-            icon={<ChevronRight size={16} />}
-            label="Bob Sessions"
+            to="/outcomes"
+            icon={<BarChart3 size={16} />}
+            label="Outcomes & Review"
             planned
-          />
-          <NavItem
-            to="#"
-            icon={<ChevronRight size={16} />}
-            label="Outcomes"
-            planned
+            badge="FUTURE"
+            onClick={onClose}
           />
         </div>
 
-        {/* Footer */}
-        <div style={{ padding: '12px 16px', borderTop: '1px solid #1F2937', fontSize: '11px', color: '#4B5563' }}>
-          Milestone 6 — Frontend
+        {/* Sidebar Info Card */}
+        <div style={{ padding: '14px 14px 16px' }}>
+          <div
+            style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid var(--color-sidebar-border)',
+              borderRadius: 'var(--radius)',
+              padding: '12px 14px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span
+                style={{
+                  fontSize: '10.5px',
+                  color: '#60A5FA',
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                AUTONOMOUS AGENT
+              </span>
+              <span className="pulse-dot pulse-dot-green" title="IBM Bob Headless Runtime Online" />
+            </div>
+            <p style={{ color: '#F8FAFC', fontSize: '13px', fontWeight: 700, letterSpacing: '-0.01em' }}>
+              IBM Bob Agent
+            </p>
+            <p style={{ color: 'var(--color-sidebar-text-muted)', fontSize: '11px', lineHeight: 1.4 }}>
+              Headless CLI &bull; TF-IDF Retrieval
+            </p>
+            <div
+              style={{
+                marginTop: '4px',
+                paddingTop: '6px',
+                borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '10px',
+                color: 'var(--color-sidebar-text-faint)',
+              }}
+            >
+              <span>Guardrails: ACTIVE</span>
+              <span style={{ color: '#10B981', fontWeight: 600 }}>ONLINE</span>
+            </div>
+          </div>
         </div>
-      </nav>
+
+        {/* Footer */}
+        <div
+          style={{
+            padding: '12px 18px',
+            borderTop: '1px solid var(--color-sidebar-border)',
+            fontSize: '11px',
+            color: 'var(--color-sidebar-text-faint)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <span>Bob Intelligence</span>
+          <span style={{ color: '#10B981', fontWeight: 600 }}>Ready</span>
+        </div>
+      </aside>
     </>
   )
 }
@@ -263,6 +457,8 @@ interface HeaderProps {
   showSearch?: boolean
   connStatus: ConnStatus
   onConnCheck: () => void
+  theme: 'light' | 'dark'
+  onToggleTheme: () => void
 }
 
 function Header({
@@ -275,16 +471,19 @@ function Header({
   showSearch,
   connStatus,
   onConnCheck,
+  theme,
+  onToggleTheme,
 }: HeaderProps) {
   return (
     <header
       style={{
         height: 'var(--header-height)',
-        background: 'var(--color-surface)',
+        background: 'var(--color-header-bg)',
+        backdropFilter: 'blur(12px)',
         borderBottom: '1px solid var(--color-border)',
         display: 'flex',
         alignItems: 'center',
-        padding: '0 20px',
+        padding: '0 24px',
         gap: '16px',
         position: 'sticky',
         top: 0,
@@ -295,55 +494,144 @@ function Header({
       <button
         onClick={onMenuClick}
         aria-label="Open navigation"
-        style={{ display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', padding: '4px' }}
+        style={{
+          display: 'none',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--color-text-secondary)',
+          padding: '6px',
+          borderRadius: 'var(--radius)',
+          border: '1px solid var(--color-border)',
+          background: 'var(--color-surface)',
+        }}
         className="menu-toggle"
       >
         <Menu size={18} />
       </button>
 
-      {/* Title */}
+      {/* Title & breadcrumbs */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <h1 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
-          {title}
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h1
+            style={{
+              fontSize: '16px',
+              fontWeight: 700,
+              color: 'var(--color-text)',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.2,
+            }}
+          >
+            {title}
+          </h1>
+        </div>
         {subtitle && (
-          <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', lineHeight: 1.3 }}>
+          <p
+            style={{
+              fontSize: '12px',
+              color: 'var(--color-text-muted)',
+              lineHeight: 1.3,
+              marginTop: '1px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
             {subtitle}
           </p>
         )}
       </div>
 
-      {/* Search */}
+      {/* Search Bar */}
       {showSearch && onSearchChange !== undefined && (
-        <input
-          type="search"
-          value={searchValue}
-          onChange={e => onSearchChange(e.target.value)}
-          placeholder="Search stories…"
-          aria-label="Search stories"
-          style={{
-            padding: '6px 10px',
-            borderRadius: 'var(--radius)',
-            border: '1px solid var(--color-border)',
-            fontSize: '13px',
-            width: '200px',
-            background: 'var(--color-bg)',
-            color: 'var(--color-text)',
-          }}
-        />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <Search
+            size={14}
+            style={{
+              position: 'absolute',
+              left: '10px',
+              color: 'var(--color-text-faint)',
+              pointerEvents: 'none',
+            }}
+          />
+          <input
+            type="search"
+            value={searchValue}
+            onChange={e => onSearchChange(e.target.value)}
+            placeholder="Search stories, keys, status…"
+            aria-label="Search stories"
+            className="input-base"
+            style={{
+              paddingLeft: '32px',
+              paddingRight: searchValue ? '28px' : '10px',
+              height: '34px',
+              width: '260px',
+              fontSize: '12.5px',
+              background: 'var(--color-bg)',
+            }}
+          />
+          {searchValue && (
+            <button
+              onClick={() => onSearchChange('')}
+              aria-label="Clear search"
+              style={{
+                position: 'absolute',
+                right: '8px',
+                color: 'var(--color-text-faint)',
+                padding: '2px',
+              }}
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
       )}
 
       {/* Refresh */}
       {onRefresh && (
         <button
           onClick={onRefresh}
-          title="Refresh"
+          title="Refresh stories"
           aria-label="Refresh stories"
-          style={{ display: 'flex', alignItems: 'center', color: 'var(--color-text-muted)', padding: '4px' }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--color-text-secondary)',
+            padding: '7px',
+            borderRadius: 'var(--radius)',
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-surface)',
+            cursor: 'pointer',
+          }}
         >
-          <RefreshCw size={16} />
+          <RefreshCw size={15} />
         </button>
       )}
+
+      {/* Theme toggle */}
+      <button
+        onClick={onToggleTheme}
+        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        aria-label="Toggle theme"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--color-text-secondary)',
+          padding: '7px',
+          borderRadius: 'var(--radius)',
+          border: '1px solid var(--color-border)',
+          background: 'var(--color-surface)',
+          cursor: 'pointer',
+          transition: 'all 0.15s ease',
+        }}
+      >
+        {theme === 'dark' ? (
+          <Sun size={15} style={{ color: '#F59E0B' }} />
+        ) : (
+          <Moon size={15} style={{ color: '#6366F1' }} />
+        )}
+      </button>
 
       {/* Connection status */}
       <ConnectionIndicator status={connStatus} onCheck={onConnCheck} />
@@ -378,6 +666,33 @@ export function AppShell({
   const [connStatus, setConnStatus] = useState<ConnStatus>('idle')
   const location = useLocation()
 
+  // Theme management with localStorage persistence and system preference fallback
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('bob-theme')
+      if (saved === 'light' || saved === 'dark') return saved
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        return 'dark'
+      }
+    } catch {
+      // ignore
+    }
+    return 'light'
+  })
+
+  useEffect(() => {
+    try {
+      document.documentElement.setAttribute('data-theme', theme)
+      localStorage.setItem('bob-theme', theme)
+    } catch {
+      // ignore
+    }
+  }, [theme])
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => (prev === 'light' ? 'dark' : 'light'))
+  }, [])
+
   // Close sidebar on route change
   useEffect(() => {
     setSidebarOpen(false)
@@ -398,32 +713,26 @@ export function AppShell({
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--color-bg)' }}>
       <style>{`
-        @keyframes shimmer {
-          0% { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
-        }
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
         /* Desktop: always show sidebar inline */
-        @media (min-width: 768px) {
-          .lg-sidebar {
+        @media (min-width: 900px) {
+          .app-sidebar {
             position: sticky !important;
             left: 0 !important;
             top: 0 !important;
             height: 100vh !important;
             align-self: flex-start;
           }
+          .main-content {
+            margin-left: 0 !important;
+          }
           .menu-toggle { display: none !important; }
         }
-        @media (max-width: 767px) {
-          .lg-sidebar {
-            position: fixed !important;
-          }
+        @media (max-width: 899px) {
+          .menu-toggle { display: flex !important; }
         }
-        .hover\\:bg-\\[\\#1F2937\\]:hover {
-          background: #1F2937 !important;
+        .sidebar-nav-item:hover {
+          background: rgba(255, 255, 255, 0.06) !important;
+          color: #FFFFFF !important;
         }
       `}</style>
 
@@ -436,11 +745,11 @@ export function AppShell({
           aria-label="Close navigation"
           style={{
             position: 'fixed',
-            top: '14px',
-            left: 'calc(var(--sidebar-width) - 36px)',
+            top: '16px',
+            left: 'calc(var(--sidebar-width) - 40px)',
             zIndex: 60,
-            background: '#374151',
-            border: 'none',
+            background: '#1F2937',
+            border: '1px solid rgba(255,255,255,0.1)',
             borderRadius: '50%',
             width: '28px',
             height: '28px',
@@ -448,7 +757,7 @@ export function AppShell({
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
-            color: '#D1D5DB',
+            color: '#E2E8F0',
           }}
         >
           <X size={14} />
@@ -462,18 +771,9 @@ export function AppShell({
           display: 'flex',
           flexDirection: 'column',
           minWidth: 0,
-          marginLeft: 0,
         }}
         className="main-content"
       >
-        <style>{`
-          @media (min-width: 768px) {
-            .main-content {
-              margin-left: var(--sidebar-width) !important;
-            }
-          }
-        `}</style>
-
         <Header
           title={title}
           subtitle={subtitle}
@@ -484,9 +784,11 @@ export function AppShell({
           showSearch={showSearch}
           connStatus={connStatus}
           onConnCheck={checkConn}
+          theme={theme}
+          onToggleTheme={toggleTheme}
         />
 
-        <main style={{ flex: 1, padding: '20px' }}>
+        <main style={{ flex: 1, padding: '24px 28px', maxWidth: '1400px', width: '100%', margin: '0 auto' }}>
           {children}
         </main>
       </div>

@@ -15,6 +15,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/stories/:id" element={<RecommendationView />} />
         <Route path="/stories/:id/bob-session" element={<LinkBobWork />} />
         <Route path="/stories/:id/outcome" element={<OutcomeComparison />} />
+        <Route path="/sessions" element={<LinkBobWork />} />
+        <Route path="/outcomes" element={<OutcomeComparison />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>,
