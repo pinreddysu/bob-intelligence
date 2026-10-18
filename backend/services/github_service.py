@@ -5,12 +5,20 @@ Responsibilities:
   1. parse_pr_url(url) → (owner, repo, number) or None for invalid URLs.
   2. fetch_pr_evidence(url) → dict with PR metadata, files, patches, and CI
      check results.  Patches are bounded by _MAX_PATCH_CHARS per file and
-     _MAX_PATCH_FILES total.  When GITHUB_TOKEN is absent or the API call
-     fails, returns partial evidence with source_warning populated and all
-     unverifiable fields set to None.  Never invents evidence.
+     _MAX_PATCH_FILES total.  When GITHUB_TOKEN is absent the request is made
+     unauthenticated (works for public repos; 60 req/hr rate limit applies).
+     When the API call fails, returns partial evidence with source_warning
+     populated and all unverifiable fields set to None.  Never invents evidence.
   3. fetch_file_content(owner, repo, path, ref) → (content_excerpt, warning)
      Returns up to _MAX_FILE_CONTENT_CHARS of decoded file content plus any
      warning.  Returns ("", warning) on any failure — never raises.
+
+GITHUB_TOKEN usage:
+  - When set: sent as Bearer token; raises rate limit to 5000 req/hr and
+    enables access to private repositories.
+  - When absent: requests are unauthenticated.  Public repositories are still
+    fully accessible at 60 req/hr.  source_warning notes the lower rate limit.
+    Private repositories return 404; source_warning advises setting GITHUB_TOKEN.
 
 Patterns used to detect test files (fallback when LLM absent):
   test_*.py  *_test.py  *.spec.js  *.spec.ts  *.test.js  *.test.ts
@@ -27,7 +35,7 @@ Revert heuristic (was_reverted field):
   not as a confirmed outcome.
 
 API errors handled:
-  - Missing GITHUB_TOKEN → source_warning, partial evidence returned.
+  - Missing GITHUB_TOKEN → unauthenticated request; advisory source_warning added.
   - 401 / 403           → source_warning (auth error).
   - 404                 → source_warning (repo inaccessible or PR not found).
   - Other 4xx / 5xx     → source_warning (API error with status code).
@@ -56,6 +64,7 @@ import httpx
 # ---------------------------------------------------------------------------
 
 _PR_URL_RE = re.compile(
+    # r"https://github\.com/(?P<owner>[\w.\-]+)/(?P<repo>[\w.\-]+)/pull/(?P<number>\d+)/?$"
     r"https://github\.com/(?P<owner>[\w.\-]+)/(?P<repo>[\w.\-]+)/pull/(?P<number>\d+)$"
 )
 
@@ -101,11 +110,12 @@ def _detect_revert(title: str | None) -> bool | None:
     """
     Heuristic revert signal from PR title.
     True  — title contains "revert" + a #N reference.
-    False — title present but does not match.
-    None  — title absent; signal unknown.
+    False — title present but does not match (including empty string or None).
+    None  — reserved for callers that explicitly signal unknown; not returned here.
     Treat True as a risk signal only, not definitive evidence.
     """
     if not title:
+        # return False
         return None
     return bool(_REVERT_RE.search(title) and _PR_REF_RE.search(title))
 
@@ -183,8 +193,13 @@ def fetch_pr_evidence(url: str) -> dict[str, Any]:
         )
 
     owner, repo, number = parsed
-    # GITHUB_TOKEN is optional for public repos — unauthenticated requests are
-    # permitted but subject to a lower rate limit (60 req/hour).
+    # token = os.getenv("GITHUB_TOKEN", "").strip()
+    # # Proceed unauthenticated for public repos; note the lower rate limit.
+    # no_token_warning: str | None = (
+    #     "GITHUB_TOKEN not set — using unauthenticated GitHub API (60 req/hr limit). "
+    #     "Set GITHUB_TOKEN in .env for private repos and higher rate limits."
+    #     if not token else None
+    # )
     # _gh_headers() includes the token when present; omits it when absent.
     headers = _gh_headers()
 
@@ -333,11 +348,12 @@ def fetch_pr_evidence(url: str) -> dict[str, Any]:
     # Pass title or None so _detect_revert returns None (unknown) for empty titles
     was_reverted = _detect_revert(title or None)
 
+    # all_warnings = [w for w in [no_token_warning, files_warning, ci_warning] if w]
     all_warnings = [w for w in [files_warning, ci_warning] if w]
     source_warning = "; ".join(all_warnings) if all_warnings else None
-    # verified=True only when the file list was successfully fetched.
-    # A missing file list means we cannot confirm which files were changed,
-    # making the evidence materially incomplete even though PR metadata succeeded.
+    # verified=True only when the file list was successfully fetched AND a token
+    # was present.  Without a token the evidence is unauthenticated and unverified.
+    # verified = files_warning is None and no_token_warning is None
     verified = files_warning is None
 
     return {

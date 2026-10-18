@@ -28,6 +28,7 @@ Design constraints:
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -750,57 +751,53 @@ def generate(story: Story, db: "Session") -> Recommendation:
         similar_tickets, db
     )
 
-    # ── 6. Select and fetch current PIE source files for LLM context (4d) ──
+    # ── 7. Select and fetch current PIE source files for LLM context (4d) ──
+    # Only fetch when the LLM is available — file content is purely LLM context.
     # select_files_for_llm ranks candidate files by relevance; fetch_file_content
-    # retrieves up to _FILE_CONTENT_CHAR_BUDGET chars.  Failures are captured as
-    # warnings in each file dict — never raises.
-    candidate_files = historical_evidence_service.select_files_for_llm(
-        story, similar_tickets, enriched_prs
-    )
+    # retrieves up to _FILE_CONTENT_CHAR_BUDGET chars.  Failures captured as warnings.
     current_files: list[dict] = []
-    char_budget = historical_evidence_service._FILE_CONTENT_CHAR_BUDGET
-    chars_used = 0
-    for cf in candidate_files:
-        if chars_used >= char_budget:
-            break
-        owner = cf.get("owner")
-        repo = cf.get("repo")
-        filename = cf.get("filename", "")
-        # Prefer the PR's base_branch; label it accurately so the LLM knows
-        # which revision was fetched.  Never substitute a default silently.
-        ref = cf.get("base_branch") or "HEAD"
-        ref_label = cf.get("base_branch") or "HEAD (fallback — base_branch unavailable)"
-        if not owner or not repo or not filename:
+    llm_unavailable_warning: str | None = (
+        "LLM_API_KEY not configured"
+        if not os.getenv("LLM_API_KEY", "").strip()
+        else None
+    )
+    if not llm_unavailable_warning:
+        candidate_files = historical_evidence_service.select_files_for_llm(
+            story, similar_tickets, enriched_prs
+        )
+        char_budget = historical_evidence_service._FILE_CONTENT_CHAR_BUDGET
+        chars_used = 0
+        for cf in candidate_files:
+            if chars_used >= char_budget:
+                break
+            owner = cf.get("owner")
+            repo = cf.get("repo")
+            filename = cf.get("filename", "")
+            # Prefer the PR's base_branch; label it accurately so the LLM knows
+            # which revision was fetched.  Never substitute a default silently.
+            ref = cf.get("base_branch") or "HEAD"
+            ref_label = cf.get("base_branch") or "HEAD (fallback — base_branch unavailable)"
+            if not owner or not repo or not filename:
+                current_files.append({
+                    "filename": filename,
+                    "ref": ref_label,
+                    "content": "",
+                    "warning": "owner/repo/filename unavailable — cannot fetch source.",
+                })
+                continue
+            content, fetch_warning = _github_service.fetch_file_content(owner, repo, filename, ref)
+            chars_used += len(content)
             current_files.append({
                 "filename": filename,
                 "ref": ref_label,
-                "content": "",
-                "warning": "owner/repo/filename unavailable — cannot fetch source.",
+                "content": content,
+                "warning": fetch_warning,
             })
-            continue
-        content, fetch_warning = _github_service.fetch_file_content(owner, repo, filename, ref)
-        chars_used += len(content)
-        current_files.append({
-            "filename": filename,
-            "ref": ref_label,
-            "content": content,
-            "warning": fetch_warning,
-        })
 
-    # ── 7. LLM availability — for uncertainty_note and evidence lists ───────
-    import os as _os
-    from dotenv import load_dotenv
-    load_dotenv()
-    llm_unavailable_warning: str | None = (
-        "LLM_API_KEY not configured"
-        if not _os.getenv("LLM_API_KEY", "").strip()
-        else None
-    )
-
-    # ── 8. Evidence/risk lists from _mode_engine (advisory, not final mode) ─
-    # _mode_engine still builds mode_evidence, mode_risks, mode_counterevidence,
-    # and uncertainty_note from deterministic story signals and historical data.
-    # Its numeric mode_score is discarded — the LLM owns the final mode.
+    # ── 8. Evidence/risk lists from _mode_engine ──────────────────────────────
+    # _mode_engine computes the deterministic rule-based mode and builds
+    # mode_evidence, mode_risks, mode_counterevidence, and uncertainty_note.
+    # The deterministic mode is used as the fallback when the LLM is unavailable.
     outcome_count: int = db.query(Outcome).count()
     _, _, mode_evidence, mode_risks, mode_counterevidence, uncertainty_note = (
         _mode_engine(
@@ -837,6 +834,7 @@ def generate(story: Story, db: "Session") -> Recommendation:
         similar_tickets=similar_tickets,
         enriched_prs=enriched_prs,
         current_files=current_files,
+        readiness_analysis=readiness_llm,
     )
     mode: str = mode_result.mode
     mode_rationale: str = mode_result.rationale

@@ -149,6 +149,7 @@ def _build_prompt(
     resolved_ticket_title: str | None,
     resolved_ticket_mode: str | None,
     resolved_ticket_ac_met: bool | None,
+    pr_patches: list[dict] | None = None,
 ) -> str:
     """Build the LLM prompt for PR analysis."""
     pr_merged_str = "yes" if pr_merged is True else ("no" if pr_merged is False else "unknown")
@@ -168,6 +169,22 @@ RESOLVED TICKET (historical context — this was a similar past story):
   AC met: {ac_met_str}
 """
 
+    patches_section = ""
+    if pr_patches:
+        patch_lines: list[str] = []
+        for p in pr_patches[:10]:
+            fname = p.get("filename", "?")
+            patch_text = (p.get("patch") or "")[:2000]
+            patch_lines.append(f"  --- {fname} ---\n{patch_text}")
+        if patch_lines:
+            patches_section = "\nPATCHES (actual diff content — use this for diff_summary and code_analysis_notes):\n" + "\n".join(patch_lines) + "\n"
+
+    diff_instruction = (
+        "1-2 sentences describing what code changed based on the patches above."
+        if pr_patches
+        else "1-2 sentences describing what code changed (based on file names and PR title only — do not hallucinate code you cannot see)."
+    )
+
     return f"""You are an engineering evidence analyst. Analyse the following GitHub PR in the context of a new story. Return ONLY valid JSON — no explanation outside the JSON block.
 
 NEW STORY:
@@ -181,11 +198,11 @@ PR UNDER ANALYSIS:
   Title revert heuristic: {reverted_str} (pattern match only — does not confirm the PR was actually reverted)
   Files changed:
 {files_str}
-
+{patches_section}
 INSTRUCTIONS:
 - "relevant": true if this PR addresses a similar concern to the new story; false otherwise.
 - "relevance_reason": one sentence explaining why.
-- "diff_summary": 1-2 sentences describing what code changed (based on file names and PR title only — do not hallucinate code you cannot see).
+- "diff_summary": {diff_instruction}
 - "has_tests": true if any test file appears in the file list; false if none; null if uncertain.
 - "complexity": "low", "medium", or "high" based on file count and domain signals.
 - "risk_flags": list of short strings (empty list if none).
@@ -425,8 +442,9 @@ def analyze_pr(
     story_ac: str | None,
     pr_title: str | None,
     pr_files: list[str],
-    pr_merged: bool | None,
-    pr_was_reverted: bool | None,
+    pr_patches: list[dict] | None = None,
+    pr_merged: bool | None = None,
+    pr_was_reverted: bool | None = None,
     resolved_ticket_title: str | None = None,
     resolved_ticket_mode: str | None = None,
     resolved_ticket_ac_met: bool | None = None,
@@ -445,8 +463,6 @@ def analyze_pr(
     IMPORTANT: The LLM output is advisory.  mode_signal does NOT override the
     deterministic mode_score; it is added to mode_evidence[] as an evidence item.
     """
-    from dotenv import load_dotenv
-    load_dotenv()
     api_key = os.getenv("LLM_API_KEY", "").strip()
     if not api_key:
         return None, (
@@ -468,6 +484,7 @@ def analyze_pr(
         resolved_ticket_title=resolved_ticket_title,
         resolved_ticket_mode=resolved_ticket_mode,
         resolved_ticket_ac_met=resolved_ticket_ac_met,
+        pr_patches=pr_patches or [],
     )
 
     if provider == "watsonx":
@@ -647,8 +664,6 @@ def analyze_ticket_readiness(
     produced by ticket_readiness_service but does not override them.
     Credentials, file access, and test execution are NOT assessed by the LLM.
     """
-    from dotenv import load_dotenv
-    load_dotenv()
     api_key = os.getenv("LLM_API_KEY", "").strip()
     if not api_key:
         return None, (
@@ -741,6 +756,7 @@ def _build_mode_prompt(
     similar_tickets: list[dict],
     enriched_prs: list[dict],
     current_files: list[dict],
+    readiness_analysis: ReadinessLLMAnalysis | None = None,
 ) -> str:
     """Build the LLM prompt for evidence-based mode recommendation."""
 
@@ -797,6 +813,32 @@ def _build_mode_prompt(
 
     blockers_str = ", ".join(str(b) for b in story_blockers) if story_blockers else "none"
 
+    # Readiness analysis section — included when the readiness LLM ran successfully
+    readiness_section = ""
+    if readiness_analysis is not None:
+        gaps_str = (
+            "\n".join(f"    - {g}" for g in readiness_analysis.blocking_gaps)
+            if readiness_analysis.blocking_gaps
+            else "    (none)"
+        )
+        needed_str = (
+            "\n".join(f"    - {n}" for n in readiness_analysis.needed_context)
+            if readiness_analysis.needed_context
+            else "    (none)"
+        )
+        readiness_section = f"""
+TICKET READINESS ASSESSMENT (from independent LLM readiness analysis — treat as advisory input):
+  Sufficiency verdict  : {readiness_analysis.sufficiency_verdict or "unknown"}
+  Context blocks impl  : {readiness_analysis.context_blocks_resolution}
+  Blocking gaps        :
+{gaps_str}
+  Needed context       :
+{needed_str}
+  Evidence relevance   : {readiness_analysis.evidence_relevance or "unknown"} — {readiness_analysis.evidence_relevance_reason or ""}
+  Readiness mode hint  : {readiness_analysis.recommended_mode or "unknown"} (confidence: {readiness_analysis.confidence or "unknown"})
+  Readiness rationale  : {readiness_analysis.mode_rationale or "(none)"}
+"""
+
     return f"""IMPORTANT: You are a pure reasoning engine. Do not use any file tools, read any files, or explore any repository. All context you need is provided below — answer from it directly.
 
 You are an engineering evidence analyst recommending an execution mode for a software ticket.
@@ -816,7 +858,7 @@ LINKED PR EVIDENCE (file names, patches, and metadata from historical PRs):
 
 CURRENT SOURCE EXCERPTS (fetched at the ref shown — empty means unavailable, not that the file is empty):
 {src_str}
-
+{readiness_section}
 INSTRUCTIONS:
 Recommend one of three execution modes based solely on the evidence above:
   "bob_led"      — Strong, applicable historical evidence; clear implementation target;
@@ -855,21 +897,25 @@ def analyze_mode(
     similar_tickets: list[dict],
     enriched_prs: list[dict],
     current_files: list[dict],
+    readiness_analysis: ReadinessLLMAnalysis | None = None,
 ) -> ModeAnalysis:
     """
     Call the configured LLM to recommend an execution mode from evidence.
 
     Parameters
     ----------
-    story_title       : ticket title
-    story_description : ticket description
-    story_ac          : acceptance criteria text
-    story_blockers    : list of blocking issue keys
-    similar_tickets   : output of historical_evidence_service.find_similar()
-    enriched_prs      : output of historical_evidence_service.enrich_prs_with_github()
-                        including transient "patches" dicts
-    current_files     : list of dicts {filename, ref, content, warning} produced by
-                        the caller after fetching via github_service.fetch_file_content()
+    story_title        : ticket title
+    story_description  : ticket description
+    story_ac           : acceptance criteria text
+    story_blockers     : list of blocking issue keys
+    similar_tickets    : output of historical_evidence_service.find_similar()
+    enriched_prs       : output of historical_evidence_service.enrich_prs_with_github()
+                         including transient "patches" dicts
+    current_files      : list of dicts {filename, ref, content, warning} produced by
+                         the caller after fetching via github_service.fetch_file_content()
+    readiness_analysis : output of analyze_ticket_readiness() — when provided, the mode
+                         prompt includes blocking gaps, sufficiency verdict, and the
+                         readiness-suggested mode as advisory context.
 
     Returns
     -------
@@ -886,8 +932,6 @@ def analyze_mode(
     The LLM must not determine mode from description length, keyword patterns,
     presence of Given/When/Then, or TF-IDF score thresholds.
     """
-    from dotenv import load_dotenv
-    load_dotenv()
     api_key = os.getenv("LLM_API_KEY", "").strip()
     if not api_key:
         return ModeAnalysis(
@@ -918,6 +962,7 @@ def analyze_mode(
         similar_tickets=similar_tickets or [],
         enriched_prs=enriched_prs or [],
         current_files=current_files or [],
+        readiness_analysis=readiness_analysis,
     )
 
     if provider == "watsonx":
