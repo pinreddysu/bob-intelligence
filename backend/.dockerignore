@@ -1,0 +1,31 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+**/.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Local database (created fresh at runtime in the container)
+bob_intelligence.db
+bob_intelligence_test.db
+
+# Environment secrets — never bake into the image
+.env
+
+# Tests
+tests/
+
+# Bob IDE config
+.bob/
+
+# macOS
+.DS_Store

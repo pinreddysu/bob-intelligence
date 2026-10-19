@@ -1,0 +1,32 @@
+[
+  {
+    "_comment": "SAMPLE DATA — source: 'sample'. Never produced by a live Jira import.",
+    "jira_key": "PIE-2",
+    "title": "Add POST /login endpoint in user controller",
+    "description": "As a user, I want to login to the account that I have already created.\n\n The endpoint must:\n- Accept email and passsword use seperate DTOs like create account.\n- Returns access to user portfolio of logged in user and page 200 OK status when email and password match otherwise, login information is incorrect return message login failed.",
+    "acceptance_criteria": "1. POST /login returns HTTP 200 with a message: 'login successful' if creds are correct or 'login failed' if creds are incorrect.\n2. Unit tests cover: invalid login creds and login creds",
+    "story_points": 5,
+    "labels": ["api", "user", "backend"],
+    "priority": "high",
+    "status": "Ready for Dev",
+    "assignee": null,
+    "blockers": [],
+    "linked_prs": [],
+    "source": "sample"
+  },
+  {
+    "_comment": "SAMPLE DATA — source: 'sample'. Never produced by a live Jira import.",
+    "jira_key": "PIE-4",
+    "title": "Setup JWT and Bcrypt for password",
+    "description": "Add JWT and Bcrypt for password",
+    "acceptance_criteria": "1. No secrets or connection strings appear in committed source code.\n2. A .env.example file documents all required variables.\n3. Application starts correctly when environment variables are set.\n4. Existing integration tests pass unchanged.",
+    "story_points": 3,
+    "labels": ["Authentication", "security", "backend"],
+    "priority": "highest",
+    "status": "Ready for Dev",
+    "assignee": null,
+    "blockers": ["PIE-2"],
+    "linked_prs": [],
+    "source": "sample"
+  }
+]

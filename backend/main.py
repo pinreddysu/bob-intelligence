@@ -1,0 +1,68 @@
+"""
+Bob Intelligence — FastAPI application entry point.
+
+Milestone 1: health endpoint.
+Milestone 2: ORM init, stories router, developer-profiles router.
+Milestone 3: recommendations router (priority + mode), approval/override endpoints,
+             downstream 409 gates on bob-sessions and outcomes.
+Milestone 4a: resolved-tickets router (import + list).
+"""
+
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from backend.database import init_db, SessionLocal
+from backend.routers import stories
+from backend.routers import developer_profiles
+from backend.routers import recommendations
+from backend.routers import bob_sessions
+from backend.routers import outcomes
+from backend.routers import resolved_tickets
+from backend.routers.resolved_tickets import _load_sample, _upsert_tickets
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Create database tables on startup, then seed sample resolved tickets if the table is empty."""
+    import os
+    init_db()
+    if os.getenv("BOB_SKIP_SAMPLE_SEED", "").lower() not in ("1", "true", "yes"):
+        db = SessionLocal()
+        try:
+            _upsert_tickets(_load_sample(), db)
+        finally:
+            db.close()
+    yield
+
+
+app = FastAPI(
+    title="Bob Intelligence",
+    description="Explainable Bob/Collaborative/Human-led execution recommendations for Jira stories.",
+    version="0.4.0",
+    lifespan=lifespan,
+)
+
+# Allow the Vite dev server (default port 5173) to call the API during development.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Register routers
+app.include_router(stories.router)
+app.include_router(developer_profiles.router)
+app.include_router(recommendations.router)
+app.include_router(bob_sessions.router)
+app.include_router(outcomes.router)
+app.include_router(resolved_tickets.router)
+
+
+@app.get("/api/health", tags=["health"])
+def health_check() -> dict:
+    """Liveness check — returns 200 OK when the backend is running."""
+    return {"status": "ok"}

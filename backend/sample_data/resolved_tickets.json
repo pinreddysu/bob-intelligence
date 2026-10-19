@@ -1,0 +1,42 @@
+[
+  {
+    "_comment": "SAMPLE DATA — resolved ticket; source='sample'. Additional portfolio API ticket for depth.",
+    "jira_key": "PIE-3",
+    "title": "Create Requset and Response DTOs for /create api enpoint",
+    "description": "Create request and response DTOs for /create api endpoint when accepting request body from the user creating account. The DTO's should have validations for each field.\n\nDTOs for create account requset and response\n- Accept firstname and lastname with alpha character ranging 2 - 24, valid email address using @Email validations, valid passwords alphanumeric with symbols ranging from 8-20 characters.\n Return 200OK with account created with valid request otherwise, one or more fields are invalid",
+    "resolution": "Done",
+    "labels": ["api", "user", "Create Account", "backend"],
+    "linked_prs": [
+      "https://github.com/pinreddysu/Ai-stock-intelligence-platform-hackathon/pull/2"
+    ],
+    "files_changed": [
+      "src/main/java/com/ai_stock_intelligience/aiStockIntelligenceBackend/Dto/Requests/RegisterRequestDto.java",
+      "src/main/java/com/ai_stock_intelligience/aiStockIntelligenceBackend/Service/UserAuthService.java"
+    ],
+    "mode_used": "human_led",
+    "ac_met": true,
+    "was_reverted": false,
+    "source": "sample"
+  },
+  {
+    "_comment": "SAMPLE DATA — resolved ticket; source='sample'. Overlaps with PIE-2 (portfolio rebalancing endpoint).",
+    "jira_key": "PIE-1",
+    "title": "Setup User and its /create api",
+    "description": "In PIE, I want a REST endpoint for creating user account for PIE and returns the user that was created in JSON response.\n\nThe endpoint must:\n- Accept firstname, lastname, email, password.\n- Return a status code of 200 OK with user response body for user created.\n Out of scope: /login endpoint",
+    "resolution": "Done",
+    "labels": ["api", "user", "Create Account", "backend"],
+    "linked_prs": [
+      "https://github.com/pinreddysu/Ai-stock-intelligence-platform-hackathon/pull/1"
+    ],
+    "files_changed": [
+      "src/main/java/com/ai_stock_intelligience/aiStockIntelligenceBackend/Controller/UserAuthController.java",
+      "src/main/java/com/ai_stock_intelligience/aiStockIntelligenceBackend/Models/Users.java",
+      "src/main/java/com/ai_stock_intelligience/aiStockIntelligenceBackend/Repository/UserRepository.java",
+      "src/main/java/com/ai_stock_intelligience/aiStockIntelligenceBackend/Service/UserAuthService.java"
+    ],
+    "mode_used": "human_led",
+    "ac_met": true,
+    "was_reverted": false,
+    "source": "sample"
+  }
+]

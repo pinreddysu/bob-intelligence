@@ -1,0 +1,35 @@
+[
+  {
+    "_comment": "SAMPLE DATA — source: 'sample'. Never produced by a live Jira import.",
+    "display_name": "Alex Chen",
+    "jira_account_id": "alex.chen",
+    "verified_skills": ["python", "fastapi", "rest-api", "sqlalchemy", "postgresql"],
+    "verified_pr_count": 14,
+    "verified_review_count": 22,
+    "recent_domains": ["api", "backend", "database"],
+    "availability_note": null,
+    "source": "sample"
+  },
+  {
+    "_comment": "SAMPLE DATA — source: 'sample'. Never produced by a live Jira import.",
+    "display_name": "Priya Nair",
+    "jira_account_id": "priya.nair",
+    "verified_skills": ["react", "typescript", "css", "accessibility", "vite"],
+    "verified_pr_count": 9,
+    "verified_review_count": 11,
+    "recent_domains": ["frontend", "ui", "accessibility"],
+    "availability_note": null,
+    "source": "sample"
+  },
+  {
+    "_comment": "SAMPLE DATA — source: 'sample'. Never produced by a live Jira import.",
+    "display_name": "Jordan Kim",
+    "jira_account_id": "jordan.kim",
+    "verified_skills": ["python", "devops", "docker", "ci-cd", "security"],
+    "verified_pr_count": 7,
+    "verified_review_count": 8,
+    "recent_domains": ["infra", "security", "config"],
+    "availability_note": "on leave week 3",
+    "source": "sample"
+  }
+]
